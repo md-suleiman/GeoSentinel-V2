@@ -87,6 +87,52 @@ function formatSettlementType(type) {
 
 
 /* -------------------------------- */
+/* Road connectivity status */
+/* -------------------------------- */
+
+function getRoadConnectivityStatus(road, latitude, longitude, reports) {
+  if (!road) {
+    return { key: "unknown", label: "No mapped road", detail: "No nearby mapped road is available for connectivity assessment." };
+  }
+
+  const lat = Number(latitude);
+  const lon = Number(longitude);
+  const roadReports = (reports || [])
+    .filter((report) => {
+      const type = String(report.report_type || "").toLowerCase();
+      return (type.includes("road blockage") || type.includes("road damage")) && (report.status || "Pending") !== "Rejected";
+    })
+    .map((report) => ({
+      ...report,
+      distanceKm: haversineDistanceKm(lat, lon, Number(report.latitude), Number(report.longitude)),
+    }))
+    .filter((report) => Number.isFinite(report.distanceKm) && report.distanceKm <= 2)
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+
+  const verifiedBlockage = roadReports.find((report) => report.status === "Verified" && String(report.report_type || "").toLowerCase().includes("road blockage"));
+  if (verifiedBlockage) {
+    return { key: "verified-blocked", label: "Verified blocked", detail: `Authority-verified road blockage reported ${formatDistance(verifiedBlockage.distanceKm * 1000)} away.`, report: verifiedBlockage };
+  }
+
+  const reportedBlockage = roadReports.find((report) => String(report.report_type || "").toLowerCase().includes("road blockage"));
+  if (reportedBlockage) {
+    return { key: "reported-blocked", label: "Reported blocked", detail: `Field blockage report is awaiting authority verification (${formatDistance(reportedBlockage.distanceKm * 1000)} away).`, report: reportedBlockage };
+  }
+
+  const verifiedDamage = roadReports.find((report) => report.status === "Verified" && String(report.report_type || "").toLowerCase().includes("road damage"));
+  if (verifiedDamage) {
+    return { key: "potentially-affected", label: "Potentially affected", detail: `Authority-verified road damage reported ${formatDistance(verifiedDamage.distanceKm * 1000)} away.`, report: verifiedDamage };
+  }
+
+  return { key: "open", label: "Open / no blockage reported", detail: "No non-rejected road blockage report was found near this road." };
+}
+
+function roadStatusClass(statusKey) {
+  return `road-status-badge road-status-${statusKey}`;
+}
+
+
+/* -------------------------------- */
 /* Authority response priority */
 /* -------------------------------- */
 
@@ -111,7 +157,9 @@ function AuthorityPriority({ recentAnalyses, reports, onViewLocation }) {
         .sort((a, b) => a.distanceKm - b.distanceKm);
 
       const infrastructure = analysis.result.infrastructure || {};
-      const roadDistance = Number(infrastructure.nearest_road?.distance_m);
+      const road = infrastructure.nearest_road;
+      const roadConnectivity = getRoadConnectivityStatus(road, lat, lon, reports);
+      const roadDistance = Number(road?.distance_m);
       const settlementDistance = Number(infrastructure.nearest_settlement?.distance_m);
       const infrastructureScore =
         (Number.isFinite(roadDistance) && roadDistance <= 2000 ? 8 : Number.isFinite(roadDistance) && roadDistance <= 5000 ? 4 : 0) +
@@ -126,6 +174,7 @@ function AuthorityPriority({ recentAnalyses, reports, onViewLocation }) {
         lon,
         verifiedNearby,
         infrastructure,
+        roadConnectivity,
         priorityScore,
         priority,
       };
@@ -199,6 +248,7 @@ function AuthorityPriority({ recentAnalyses, reports, onViewLocation }) {
                   <span><b>AI risk:</b> {risk} ({item.result.risk_score}/100)</span>
                   <span><b>Verified reports:</b> {item.verifiedNearby.length}</span>
                   {road && <span><b>Nearest road:</b> {road.name || "Unnamed road"} · {formatDistance(road.distance_m)}</span>}
+                  {road && <span><b>Connectivity:</b> {item.roadConnectivity.label}</span>}
                   {settlement && <span><b>Nearest settlement:</b> {settlement.name || "Unnamed settlement"} · {formatDistance(settlement.distance_m)}</span>}
                 </div>
                 <div className="priority-action">
@@ -238,10 +288,13 @@ function haversineDistanceKm(lat1, lon1, lat2, lon2) {
 
 
 function getReportMarkerColor(report) {
-  // Green means authority-verified evidence.
-  // All unverified field reports remain red.
-  if (report.status === "Verified") return "#16a34a";
-  return "#dc2626";
+  // Map marker colors match the field-report status:
+  // Pending = orange, Verified = green, Rejected = red.
+  const status = report.status || "Pending";
+
+  if (status === "Verified") return "#16a34a";
+  if (status === "Rejected") return "#dc2626";
+  return "#f59e0b";
 }
 
 function formatReportDate(value) {
@@ -1984,6 +2037,26 @@ function App() {
                       </div>
 
 
+                      {(() => {
+                        const roadStatus = getRoadConnectivityStatus(
+                          result.infrastructure.nearest_road,
+                          latitude,
+                          longitude,
+                          reports
+                        );
+
+                        return (
+                          <div className="road-connectivity-status">
+                            <div className="road-status-row">
+                              <span className="infrastructure-label">Connectivity</span>
+                              <span className={roadStatusClass(roadStatus.key)}>{roadStatus.label}</span>
+                            </div>
+                            <p className="road-status-detail">{roadStatus.detail}</p>
+                            <p className="road-status-source">Based on field reports near the analyzed road.</p>
+                          </div>
+                        );
+                      })()}
+
                       {result.infrastructure
                         .potentially_exposed_roads
                         ?.length > 0 ? (
@@ -2127,8 +2200,9 @@ function App() {
 
                     "Potentially exposed" indicates
                     proximity to a predicted risk area.
-                    It does not confirm that a road is
-                    blocked or infrastructure is damaged.
+                    Road connectivity is assessed separately
+                    from field reports and authority verification;
+                    proximity alone does not mean a road is blocked.
 
                   </div>
 
