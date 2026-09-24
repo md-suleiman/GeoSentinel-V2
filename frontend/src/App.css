@@ -921,8 +921,8 @@ button:disabled {
 }
 
 .admin-header-icon {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border: 1px solid #334155;
   border-radius: 10px;
   display: flex;
@@ -1289,7 +1289,7 @@ button:disabled {
   }
 
   .brand-title {
-    font-size: 21px;
+    font-size: 19px;
   }
 
   .status {
@@ -3252,3 +3252,1303 @@ button:disabled {
 .road-status-detail { margin: 7px 0 0; color: #475569; font-size: 11px; line-height: 1.4; }
 .road-status-source { margin: 6px 0 0; color: #94a3b8; font-size: 10px; line-height: 1.35; }
 
+
+
+/* ========================================= */
+/* EARLY WARNING */
+/* ========================================= */
+.early-warning-panel { border-left: 5px solid #f59e0b; }
+.early-warning-high { border-left-color: #dc2626; }
+.early-warning-medium { border-left-color: #f59e0b; }
+.early-warning-low { border-left-color: #16a34a; }
+.early-warning-header { display: flex; align-items: flex-start; gap: 12px; }
+.early-warning-header h2 { margin: 0; }
+.early-warning-icon { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: rgba(245, 158, 11, 0.14); font-size: 21px; flex-shrink: 0; }
+.early-warning-high .early-warning-icon { background: rgba(220, 38, 38, 0.12); }
+.early-warning-low .early-warning-icon { background: rgba(22, 163, 74, 0.12); }
+.early-warning-score { display: inline-block; margin-top: 4px; font-size: 13px; font-weight: 700; opacity: 0.75; }
+.early-warning-message { margin: 14px 0 10px; }
+.early-warning-factors { margin-top: 12px; }
+.early-warning-factors ul { margin: 7px 0 0; padding-left: 20px; }
+.early-warning-factors li { margin-bottom: 5px; }
+.early-warning-action { margin-top: 14px; padding: 11px 13px; border-radius: 10px; background: rgba(148, 163, 184, 0.10); }
+.early-warning-action p { margin: 5px 0 0; }
+.early-warning-source { margin: 12px 0 0; font-size: 11px; opacity: 0.62; }
+
+/* =========================================================
+   LOCATION-AWARE EARLY WARNING OVERLAY
+   No sidebar/card clutter — alerts float over the app.
+   ========================================================= */
+.threat-alert {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  right: auto;
+  z-index: 3000;
+  width: min(390px, calc(100% - 40px));
+  transform: translate(-50%, -50%);
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 22px;
+  gap: 10px;
+  padding: 13px 12px 12px;
+  border-radius: 13px;
+  background: rgba(255,255,255,.98);
+  box-shadow: 0 18px 50px rgba(15,23,42,.24);
+  border: 1px solid #e2e8f0;
+  animation: threatAlertIn .24s ease-out;
+}
+
+.threat-alert-predicted { border-left: 5px solid #f59e0b; }
+.threat-alert-reported { border-left: 5px solid #f59e0b; }
+.threat-alert-confirmed { border-left: 5px solid #dc2626; }
+
+.threat-alert-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #f1f5f9;
+  font-size: 21px;
+}
+
+.threat-alert-confirmed .threat-alert-icon { background: #fee2e2; }
+.threat-alert-predicted .threat-alert-icon,
+.threat-alert-reported .threat-alert-icon { background: #fef3c7; }
+
+.threat-alert-content { min-width: 0; }
+.threat-alert-kicker {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  color: #64748b;
+  margin-bottom: 3px;
+}
+.threat-alert-confirmed .threat-alert-kicker { color: #b91c1c; }
+.threat-alert-predicted .threat-alert-kicker,
+.threat-alert-reported .threat-alert-kicker { color: #b45309; }
+
+.threat-alert h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.25;
+  color: #0f172a;
+}
+
+.threat-alert p {
+  margin: 7px 0 9px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #475569;
+}
+
+.threat-alert-distance,
+.threat-alert-score {
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  color: #334155;
+  margin-top: 3px;
+}
+
+.threat-alert-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.threat-alert-actions button {
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  background: #0f172a;
+  color: white;
+}
+
+.threat-alert-actions .threat-alert-dismiss {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.threat-alert-close {
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  font-size: 21px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+@keyframes threatAlertIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.98); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* =========================================================
+   MOBILE LAYOUT
+   Keep the map useful, expose navigation, and let the full
+   analysis/report content continue below without a second
+   fixed-height scrollbar.
+   ========================================================= */
+@media (max-width: 900px) {
+  .topbar {
+    height: auto !important;
+    min-height: 68px !important;
+    flex-wrap: wrap !important;
+    padding: 10px 12px 8px !important;
+    row-gap: 8px !important;
+  }
+
+  .brand-block { min-width: 0 !important; }
+  .brand-copy { min-width: 0 !important; }
+  .brand-title { font-size: 21px !important; }
+
+  .top-actions {
+    margin-left: auto !important;
+    flex-shrink: 0 !important;
+  }
+
+  .top-nav {
+    display: flex !important;
+    order: 3;
+    width: 100%;
+    margin: 0 !important;
+    padding: 2px 0 0;
+    justify-content: stretch;
+    gap: 6px;
+  }
+
+  .top-nav-link,
+  .top-nav > a {
+    flex: 1 1 0;
+    justify-content: center;
+    min-height: 36px;
+    padding: 7px 6px !important;
+    border-radius: 9px;
+    font-size: 11px !important;
+  }
+
+  .dashboard {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .map-section {
+    height: 38vh !important;
+    min-height: 300px !important;
+    max-height: 380px !important;
+  }
+
+  .sidebar {
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 12px !important;
+  }
+
+  .panel { width: 100%; box-sizing: border-box; }
+
+  .map-legend {
+    left: 10px !important;
+    bottom: 10px !important;
+    min-width: 0 !important;
+    width: auto !important;
+    max-width: calc(100vw - 28px);
+    padding: 8px 10px !important;
+    font-size: 10px !important;
+  }
+
+  .map-legend-item { gap: 6px !important; }
+  .map-legend-title { font-size: 10px !important; }
+
+  .threat-alert {
+    top: 76px;
+    right: 10px;
+    width: calc(100vw - 20px);
+    grid-template-columns: 38px minmax(0, 1fr) 22px;
+    gap: 10px;
+    padding: 13px 11px;
+  }
+
+  .threat-alert-icon { width: 38px; height: 38px; }
+}
+
+@media (max-width: 520px) {
+  .admin-trigger {
+    font-size: 10px !important;
+    padding: 7px 8px !important;
+  }
+
+  .admin-trigger svg { width: 14px !important; height: 14px !important; }
+
+  .map-section {
+    height: 36vh !important;
+    min-height: 285px !important;
+    max-height: 330px !important;
+  }
+
+  .sidebar { padding: 10px !important; }
+
+  .panel { padding: 14px !important; }
+
+  .location-action-row {
+    gap: 8px !important;
+  }
+
+  .location-action-row button {
+    min-height: 44px !important;
+    font-size: 12px !important;
+  }
+
+  .threat-alert h3 { font-size: 15px; }
+  .threat-alert p { font-size: 12px; }
+}
+
+/* Admin header actions for explicit logout. */
+.admin-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.admin-logout {
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
+  border-radius: 8px;
+  padding: 8px 11px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .admin-header-actions { width: 100%; justify-content: flex-end; }
+  .admin-header { flex-wrap: wrap; }
+}
+
+
+/* =========================================================
+   MAIN FEATURE POLISH
+   ========================================================= */
+
+/* Compact historical layer toggle: intentionally separate from the legend. */
+.historical-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1000;
+  width: auto !important;
+  margin: 0 !important;
+  padding: 7px 10px !important;
+  border: 1px solid rgba(15, 23, 42, 0.14) !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: #334155 !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  backdrop-filter: blur(5px);
+}
+
+.historical-toggle.active {
+  background: #f5f3ff !important;
+  border-color: #c4b5fd !important;
+  color: #6d28d9 !important;
+}
+
+/* Collapsible "Why this score?" control. */
+.score-explanation {
+  margin-top: 14px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.score-explanation-toggle {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 12px 2px !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #0f766e !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  text-align: left;
+}
+
+.score-explanation-toggle:hover:not(:disabled) {
+  opacity: 1 !important;
+  color: #115e59 !important;
+}
+
+.score-explanation-chevron {
+  font-size: 17px;
+  color: #64748b;
+}
+
+.score-explanation-body {
+  padding: 0 2px 10px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.score-explanation-body ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.score-explanation-body li {
+  margin-bottom: 6px;
+}
+
+/* ============================= */
+/* TAB-BASED AUTHORITY DASHBOARD */
+/* ============================= */
+.admin-tabs {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 16px;
+  padding: 5px;
+  border: 1px solid #dce4ec;
+  border-radius: 11px;
+  background: #eaf0f5;
+}
+
+.admin-tab {
+  flex: 1 1 0;
+  width: auto !important;
+  margin: 0 !important;
+  padding: 10px 12px !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: #475569 !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+}
+
+.admin-tab:hover:not(:disabled) {
+  opacity: 1 !important;
+  background: rgba(255,255,255,.65) !important;
+}
+
+.admin-tab.active {
+  background: #ffffff !important;
+  border-color: #d7e0e8 !important;
+  color: #0f172a !important;
+  box-shadow: 0 2px 6px rgba(15,23,42,.06);
+}
+
+.admin-tab span {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  margin-left: 5px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 9px;
+}
+
+.admin-overview-grid {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.admin-overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-overview-metrics > div {
+  padding: 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.admin-overview-metrics span {
+  display: block;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.admin-overview-metrics strong {
+  display: block;
+  margin-top: 7px;
+  color: #0f172a;
+  font-size: 24px;
+}
+
+.admin-mini-analysis-list {
+  display: grid;
+  gap: 7px;
+}
+
+.admin-mini-analysis {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.admin-mini-analysis > div:first-child {
+  min-width: 0;
+}
+
+.admin-mini-analysis strong,
+.admin-mini-analysis span {
+  display: block;
+}
+
+.admin-mini-analysis strong {
+  color: #0f172a;
+  font-size: 11px;
+}
+
+.admin-mini-analysis span {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 10px;
+}
+
+.admin-mini-analysis-score {
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.admin-small-map,
+.admin-view-map {
+  width: auto !important;
+  margin: 0 !important;
+  padding: 7px 9px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 7px !important;
+  background: #ffffff !important;
+  color: #334155 !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+}
+
+.admin-small-map:hover:not(:disabled),
+.admin-view-map:hover:not(:disabled) {
+  opacity: 1 !important;
+  background: #f8fafc !important;
+}
+
+.admin-report-media-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.admin-report-media-actions .admin-view-image {
+  margin: 0 !important;
+}
+
+@media (max-width: 800px) {
+  .admin-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-overview-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-tab {
+    padding: 9px 6px !important;
+    font-size: 10px !important;
+  }
+
+  .admin-mini-analysis {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .admin-small-map {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+}
+
+@media (max-width: 520px) {
+  .historical-toggle {
+    top: 8px;
+    right: 8px;
+    padding: 6px 8px !important;
+  }
+
+  .threat-alert {
+    top: 40% !important;
+    left: 50% !important;
+    width: min(320px, calc(100% - 28px)) !important;
+    padding: 13px 12px 12px !important;
+    grid-template-columns: 36px minmax(0, 1fr) 20px !important;
+    gap: 9px !important;
+    border-radius: 13px !important;
+  }
+
+  .threat-alert-icon {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 18px !important;
+  }
+
+  .threat-alert h3 {
+    font-size: 15px !important;
+  }
+
+  .threat-alert p {
+    font-size: 12px !important;
+  }
+
+  .threat-alert-actions button {
+    padding: 7px 9px !important;
+  }
+}
+
+/* =========================================================
+   FINAL WARNING / AUTHORITY DASHBOARD FIXES
+   ========================================================= */
+
+/* Keep the authority-only note at the actual bottom of the dashboard. */
+.admin-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-footer-note {
+  margin-top: auto !important;
+  flex-shrink: 0;
+}
+
+/* Warnings sit slightly above the map center and stay compact. */
+.threat-alert {
+  top: 35% !important;
+  width: min(360px, calc(100% - 44px)) !important;
+  padding: 12px 11px 11px !important;
+  grid-template-columns: 36px minmax(0, 1fr) 20px !important;
+  gap: 9px !important;
+}
+
+.threat-alert-icon {
+  width: 36px !important;
+  height: 36px !important;
+  font-size: 18px !important;
+  border-radius: 10px !important;
+}
+
+.threat-alert h3 {
+  font-size: 14px !important;
+}
+
+.threat-alert p {
+  margin: 6px 0 8px !important;
+  font-size: 11.5px !important;
+}
+
+.threat-alert-actions {
+  margin-top: 9px !important;
+}
+
+.threat-alert-actions button {
+  padding: 6px 9px !important;
+  font-size: 10.5px !important;
+}
+
+@media (max-width: 900px) {
+  .threat-alert {
+    top: 34% !important;
+    width: min(330px, calc(100% - 28px)) !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .admin-body {
+    padding: 12px !important;
+  }
+
+  .threat-alert {
+    top: 33% !important;
+    width: min(310px, calc(100% - 24px)) !important;
+    padding: 11px 10px 10px !important;
+  }
+
+  .threat-alert-icon {
+    width: 34px !important;
+    height: 34px !important;
+  }
+}
+
+
+/* =========================================================
+   LIVE LOCATION ANALYSIS / WARNING STABILITY
+   ========================================================= */
+.location-action-row {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 9px !important;
+}
+
+.live-analysis-button {
+  width: 100% !important;
+  min-height: 44px;
+  margin: 0 !important;
+  border: 1px solid #0f766e;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.live-analysis-button:hover:not(:disabled) {
+  background: #f0fdfa;
+}
+
+.live-analysis-button.active {
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.threat-alert {
+  top: 34% !important;
+  width: min(350px, calc(100% - 42px)) !important;
+  padding: 11px 10px 10px !important;
+  grid-template-columns: 34px minmax(0, 1fr) 18px !important;
+  gap: 8px !important;
+  border-radius: 12px !important;
+}
+
+.threat-alert-icon {
+  width: 34px !important;
+  height: 34px !important;
+  font-size: 17px !important;
+}
+
+.threat-alert h3 { font-size: 14px !important; }
+.threat-alert p { font-size: 11.5px !important; margin: 5px 0 7px !important; }
+.threat-alert-distance,
+.threat-alert-score { font-size: 11px !important; }
+
+@media (max-width: 700px) {
+  .location-action-row {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .threat-alert {
+    top: 31% !important;
+    width: min(300px, calc(100% - 24px)) !important;
+  }
+}
+
+/* Keep the authority-only footer at the actual bottom of the dashboard. */
+.admin-dashboard,
+.admin-shell {
+  min-height: 100%;
+}
+
+.admin-body {
+  min-height: 0;
+}
+
+
+/* Final authority dashboard height: footer is anchored to the bottom edge. */
+.admin-shell {
+  height: calc(100vh - 44px) !important;
+  min-height: calc(100vh - 44px) !important;
+}
+
+@media (max-width: 700px) {
+  .admin-shell {
+    height: calc(100vh - 20px) !important;
+    min-height: calc(100vh - 20px) !important;
+  }
+}
+
+
+/* =========================================================
+   RECENT ANALYSIS ACTIONS
+   ========================================================= */
+.recent-analysis-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+  margin-bottom: 9px;
+}
+
+.recent-analysis-row .recent-analysis {
+  margin-bottom: 0 !important;
+  min-width: 0;
+}
+
+.recent-view-map-button {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 92px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.recent-view-map-button:hover {
+  background: #f8fafc;
+}
+
+@media (max-width: 520px) {
+  .recent-analysis-row {
+    grid-template-columns: 1fr;
+  }
+
+  .recent-view-map-button {
+    width: 100%;
+    min-height: 40px;
+  }
+}
+
+
+/* Live analysis is an explicit monitoring mode; keep it visually distinct. */
+.live-analysis-button {
+  border: 1px solid #0f766e !important;
+  background: #ecfeff !important;
+  color: #0f766e !important;
+}
+
+.live-analysis-button.active {
+  background: #0f766e !important;
+  color: #ffffff !important;
+}
+
+.live-analysis-button:disabled {
+  opacity: .7;
+}
+
+
+/* =========================================================
+   FINAL LOCATION ACTION LAYOUT / COMPACT MAP LEGEND
+   ========================================================= */
+.location-action-row {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 9px !important;
+  margin-top: 18px !important;
+}
+
+.location-primary-actions {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  gap: 9px !important;
+  width: 100% !important;
+}
+
+.location-primary-actions button {
+  width: 100% !important;
+  min-height: 44px !important;
+  margin: 0 !important;
+}
+
+/* Selected-location analysis sits below the two primary actions and is centered. */
+.location-action-row > .analyze-button {
+  width: min(58%, 300px) !important;
+  min-height: 40px !important;
+  align-self: center !important;
+  margin: 0 !important;
+}
+
+/* Smaller legend: useful reference without covering the map. */
+.map-legend {
+  left: 10px !important;
+  bottom: 10px !important;
+  min-width: 0 !important;
+  width: auto !important;
+  max-width: 180px !important;
+  padding: 7px 9px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.12) !important;
+}
+
+.map-legend-title {
+  margin-bottom: 4px !important;
+  font-size: 9px !important;
+  letter-spacing: 0.05em !important;
+}
+
+.map-legend-item {
+  gap: 6px !important;
+  min-height: 17px !important;
+  font-size: 9px !important;
+  line-height: 1.2 !important;
+}
+
+.map-legend-dot {
+  width: 7px !important;
+  height: 7px !important;
+  flex-basis: 7px !important;
+}
+
+@media (max-width: 520px) {
+  .location-primary-actions {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 7px !important;
+  }
+
+  .location-primary-actions button {
+    min-height: 42px !important;
+    font-size: 11px !important;
+  }
+
+  .location-action-row > .analyze-button {
+    width: 68% !important;
+    min-height: 40px !important;
+    font-size: 11px !important;
+  }
+
+  .map-legend {
+    max-width: 155px !important;
+    padding: 6px 8px !important;
+  }
+
+  .map-legend-item {
+    font-size: 8px !important;
+    min-height: 15px !important;
+  }
+
+  .map-legend-title {
+    font-size: 8px !important;
+  }
+}
+
+
+/* =========================================================
+   FINAL UI POLISH V2
+   ========================================================= */
+.priority-list {
+  max-height: min(58vh, 620px) !important;
+  overflow-y: auto !important;
+  padding-right: 6px !important;
+  scrollbar-width: thin;
+}
+.priority-list::-webkit-scrollbar { width: 7px; }
+.priority-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+.priority-list::-webkit-scrollbar-track { background: #f8fafc; }
+
+/* Readable again: compact, but not tiny. */
+.map-legend {
+  left: 12px !important;
+  bottom: 12px !important;
+  min-width: 190px !important;
+  max-width: 205px !important;
+  padding: 9px 11px !important;
+  border-radius: 9px !important;
+}
+.map-legend-title {
+  margin-bottom: 6px !important;
+  font-size: 10px !important;
+}
+.map-legend-item {
+  gap: 7px !important;
+  min-height: 20px !important;
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+}
+.map-legend-dot {
+  width: 8px !important;
+  height: 8px !important;
+  flex-basis: 8px !important;
+}
+
+@media (max-width: 700px) {
+  .priority-list { max-height: 52vh !important; }
+}
+
+@media (max-width: 520px) {
+  .priority-list { max-height: 48vh !important; }
+  .map-legend {
+    min-width: 175px !important;
+    max-width: 190px !important;
+    padding: 8px 10px !important;
+  }
+  .map-legend-title { font-size: 9.5px !important; }
+  .map-legend-item { font-size: 9.5px !important; min-height: 19px !important; }
+}
+
+
+/* FINAL UI V3: selected location marker and priority scrollbar */
+.selected-location-marker {
+  color: #2563eb;
+}
+
+.admin-priority-card .priority-list {
+  max-height: min(58vh, 620px) !important;
+  overflow-y: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #cbd5e1 #f8fafc !important;
+}
+
+.admin-priority-card .priority-list::-webkit-scrollbar {
+  width: 7px !important;
+}
+
+.admin-priority-card .priority-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1 !important;
+  border-radius: 999px !important;
+}
+
+.admin-priority-card .priority-list::-webkit-scrollbar-track {
+  background: #f8fafc !important;
+}
+
+/* Keep the medium-sized map legend readable. */
+.map-legend {
+  min-width: 190px !important;
+  max-width: 205px !important;
+  padding: 9px 11px !important;
+}
+.map-legend-title { font-size: 10px !important; }
+.map-legend-item { font-size: 10px !important; min-height: 20px !important; }
+.map-legend-dot { width: 8px !important; height: 8px !important; }
+
+@media (max-width: 520px) {
+  .map-legend {
+    min-width: 175px !important;
+    max-width: 190px !important;
+    padding: 8px 10px !important;
+  }
+  .map-legend-title { font-size: 9.5px !important; }
+  .map-legend-item { font-size: 9.5px !important; min-height: 19px !important; }
+}
+
+
+/* FINAL UI V4: keep the risk icon left while centering only the text. */
+.risk-key-panel .sidebar-panel-heading {
+  justify-content: flex-start !important;
+  text-align: left !important;
+}
+.risk-key-panel .sidebar-panel-heading > div:last-child {
+  flex: 1 !important;
+  text-align: center !important;
+}
+
+.admin-priority-card .priority-list {
+  scrollbar-color: #cbd5e1 #f8fafc !important;
+}
+.admin-priority-card .priority-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1 !important;
+}
+.admin-priority-card .priority-list::-webkit-scrollbar-track {
+  background: #f8fafc !important;
+}
+
+
+/* FINAL marker + analysis responsiveness */
+.selected-analysis-pin-wrapper {
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.selected-analysis-pin {
+  width: 20px;
+  height: 20px;
+  position: relative;
+  margin: 2px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  border: 3px solid #ffffff;
+  box-shadow: 0 2px 7px rgba(15,23,42,.28);
+}
+
+.selected-analysis-pin::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.selected-analysis-pin.is-loading {
+  background: #2563eb;
+}
+
+.selected-analysis-pin.risk-high {
+  background: #dc2626;
+}
+
+.selected-analysis-pin.risk-medium {
+  background: #f59e0b;
+}
+
+.selected-analysis-pin.risk-low {
+  background: #16a34a;
+}
+
+.selected-analysis-pin.risk-not applicable,
+.selected-analysis-pin.risk-selected {
+  background: #64748b;
+}
+
+
+/* Selected-location marker:
+   Blue/loading matches the Risk Levels legend with a white outline.
+   Resolved High/Medium/Low markers have no white outline. */
+
+/* Selected analysis marker: legend-style blue dot with white ring. */
+.selected-analysis-blue-wrapper {
+  background: transparent !important;
+  border: 0 !important;
+}
+.selected-analysis-blue-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 2px solid #ffffff;
+  box-sizing: border-box;
+  box-shadow: none;
+}
+
+/* Keep the analysis popup close X pinned to the top-right. */
+.geo-analysis-popup .leaflet-popup-content-wrapper {
+  position: relative;
+}
+.geo-analysis-popup .leaflet-popup-close-button {
+  position: absolute !important;
+  top: 5px !important;
+  right: 5px !important;
+  z-index: 10 !important;
+  width: 22px !important;
+  height: 22px !important;
+  line-height: 22px !important;
+  text-align: center !important;
+  padding: 0 !important;
+}
+.geo-analysis-popup .leaflet-popup-content {
+  margin: 14px 28px 12px 14px !important;
+}
+
+/* Nearby field-report popup: close X stays at the popup's top-right. */
+.field-report-popup .leaflet-popup-content-wrapper {
+  position: relative !important;
+}
+.field-report-popup .leaflet-popup-close-button {
+  position: absolute !important;
+  top: 2px !important;
+  right: 2px !important;
+  z-index: 9999 !important;
+  width: 24px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 24px !important;
+  text-align: center !important;
+  font-size: 20px !important;
+}
+
+/* Give report popup content enough top/right clearance for the X. */
+.field-report-popup .leaflet-popup-content {
+  margin: 16px 30px 12px 14px !important;
+}
+
+
+/* =========================================================
+   MOBILE COMPACT RISK ASSESSMENT
+   ========================================================= */
+@media (max-width: 700px) {
+  /* Keep Latitude + Longitude side-by-side on the mobile
+     Risk Assessment card to save vertical space. */
+  .sidebar .coordinate-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .sidebar .coordinate-card {
+    padding: 10px !important;
+    gap: 7px !important;
+  }
+
+  .sidebar .coordinate-card .metric-icon {
+    width: 30px !important;
+    height: 30px !important;
+    flex-basis: 30px !important;
+    font-size: 15px !important;
+  }
+
+  .sidebar .coordinate-card strong {
+    font-size: 13px !important;
+  }
+
+  /* Compact map legend so it doesn't cover as much of the map. */
+  .map-legend {
+    min-width: 145px !important;
+    max-width: 155px !important;
+    padding: 6px 8px !important;
+    border-radius: 8px !important;
+  }
+
+  .map-legend-title {
+    margin-bottom: 3px !important;
+    font-size: 8px !important;
+  }
+
+  .map-legend-item {
+    gap: 5px !important;
+    min-height: 15px !important;
+    font-size: 8px !important;
+    line-height: 1.15 !important;
+  }
+
+  .map-legend-dot {
+    width: 7px !important;
+    height: 7px !important;
+    flex-basis: 7px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .sidebar .coordinate-card {
+    padding: 8px !important;
+  }
+
+  .sidebar .coordinate-card .metric-icon {
+    width: 27px !important;
+    height: 27px !important;
+    flex-basis: 27px !important;
+  }
+
+  .sidebar .coordinate-card strong {
+    font-size: 12px !important;
+  }
+
+  .map-legend {
+    min-width: 135px !important;
+    max-width: 145px !important;
+    padding: 5px 7px !important;
+  }
+
+  .map-legend-item {
+    font-size: 7.5px !important;
+    min-height: 14px !important;
+  }
+}
+
+
+/* =========================================================
+   THREAT / NEARBY-REPORT ALERT — COMPACT + TRUE TOP-RIGHT X
+   ========================================================= */
+.threat-alert {
+  position: absolute;
+  align-items: start;
+  grid-template-columns: 38px minmax(0, 1fr);
+  padding: 13px 42px 12px 12px;
+}
+
+.threat-alert-content {
+  min-width: 0;
+  padding: 0 !important;
+}
+
+.threat-alert-kicker {
+  margin: 0 0 2px !important;
+}
+
+.threat-alert h3 {
+  margin: 0 !important;
+}
+
+.threat-alert p {
+  margin: 5px 0 6px !important;
+}
+
+.threat-alert-distance,
+.threat-alert-score {
+  margin: 2px 0 0 !important;
+  line-height: 1.25 !important;
+}
+
+.threat-alert-actions {
+  margin-top: 9px !important;
+}
+
+.threat-alert-close {
+  position: absolute !important;
+  top: 8px !important;
+  right: 9px !important;
+  width: 24px !important;
+  height: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 21px !important;
+  line-height: 24px !important;
+  z-index: 10 !important;
+}
+
+@media (max-width: 700px) {
+  .threat-alert {
+    width: min(390px, calc(100% - 24px)) !important;
+    padding: 11px 38px 10px 10px !important;
+    gap: 8px !important;
+  }
+
+  .threat-alert-icon {
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 10px !important;
+  }
+
+  .threat-alert p {
+    margin: 4px 0 5px !important;
+  }
+
+  .threat-alert-actions {
+    margin-top: 8px !important;
+    gap: 7px !important;
+  }
+}

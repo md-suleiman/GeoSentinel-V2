@@ -9,11 +9,15 @@ import json
 import os
 import requests
 import joblib
+import time
+from concurrent.futures import ThreadPoolExecutor
+from numbers import Integral
 
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-from shapely.geometry import LineString, Point
+from shapely.geometry import LineString, Point, box
+from shapely.strtree import STRtree
 from fastapi.staticfiles import StaticFiles
 
 
@@ -173,10 +177,35 @@ print("Infrastructure loading complete.")
 
 
 # ---------------------------------------------------------
+# ROAD SPATIAL INDEX
+# ---------------------------------------------------------
+# Build road geometries once so each prediction does not scan all roads.
+road_geometries = []
+road_records = []
+road_geometry_lookup = {}
+
+for road in roads:
+    coordinates = road.get("coordinates", [])
+    if len(coordinates) < 2:
+        continue
+    try:
+        geometry = LineString(coordinates)
+        road_geometries.append(geometry)
+        road_records.append(road)
+        road_geometry_lookup[id(geometry)] = road
+    except Exception:
+        continue
+
+road_tree = STRtree(road_geometries) if road_geometries else None
+print(f"Road spatial index ready: {len(road_geometries)} geometries")
+
+
+# ---------------------------------------------------------
 # ENVIRONMENT CACHE
 # ---------------------------------------------------------
 
 environment_cache = {}
+ENVIRONMENT_CACHE_TTL_SECONDS = 5 * 60
 
 
 def get_cache_key(
@@ -252,7 +281,7 @@ def get_elevation(
 
 
 # ---------------------------------------------------------
-# HISTORICAL RAINFALL
+# RAINFALL
 # ---------------------------------------------------------
 
 def get_rainfall(
@@ -262,6 +291,71 @@ def get_rainfall(
 
     try:
 
+        response = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": latitude,
+                "longitude": longitude,
+                "current": "precipitation,rain",
+                "hourly": "precipitation,rain",
+                "past_days": 7,
+                "forecast_days": 1,
+                "timezone": "auto",
+            },
+            timeout=10,
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        hourly = data.get("hourly", {})
+        hourly_times = hourly.get("time", [])
+        hourly_precipitation = hourly.get("precipitation", [])
+        current = data.get("current", {})
+
+        if not hourly_times or not hourly_precipitation:
+            raise ValueError("Forecast response did not include hourly precipitation")
+
+        current_time = current.get("time")
+        completed_values = []
+        for index, value in enumerate(hourly_precipitation):
+            if index >= len(hourly_times):
+                break
+            if current_time is None or hourly_times[index] <= current_time:
+                completed_values.append(0.0 if value is None else float(value))
+
+        latest_values = completed_values[-168:]
+        if not latest_values:
+            raise ValueError("Forecast response did not include completed hourly precipitation")
+
+        current_precipitation = current.get("precipitation")
+        if current_precipitation is None:
+            current_precipitation = latest_values[-1]
+
+        rainfall_24h = sum(latest_values[-24:])
+        rainfall_3d = sum(latest_values[-72:])
+        rainfall_7d = sum(latest_values)
+        rainfall_intensity = max(latest_values[-24:])
+
+        return {
+            "rainfall_mm": round(rainfall_24h, 1),
+            "rainfall_current_mm": round(float(current_precipitation), 1),
+            "rainfall_24h_mm": round(rainfall_24h, 1),
+            "rainfall_3d_mm": round(rainfall_3d, 1),
+            "rainfall_7d_mm": round(rainfall_7d, 1),
+            "rainfall_intensity_mm_h": round(rainfall_intensity, 1),
+            "rainfall_source": "open-meteo-forecast",
+        }
+
+    except Exception as live_error:
+
+        print(
+            "Live rainfall error:",
+            live_error,
+        )
+
+    try:
         response = requests.get(
             "https://archive-api.open-meteo.com/v1/archive",
             params={
@@ -274,43 +368,35 @@ def get_rainfall(
             },
             timeout=10,
         )
-
         response.raise_for_status()
 
-        data = response.json()
-
-        rainfall_values = (
-            data
-            .get("daily", {})
-            .get(
-                "precipitation_sum",
-                [],
-            )
-        )
-
+        rainfall_values = response.json().get("daily", {}).get("precipitation_sum", [])
         rainfall_values = [
-            float(value)
-            for value in rainfall_values
-            if value is not None
+            float(value) for value in rainfall_values if value is not None
         ]
+        fallback_rainfall = round(max(rainfall_values), 1) if rainfall_values else 0.0
 
-        if not rainfall_values:
+        return {
+            "rainfall_mm": fallback_rainfall,
+            "rainfall_current_mm": 0.0,
+            "rainfall_24h_mm": fallback_rainfall,
+            "rainfall_3d_mm": fallback_rainfall,
+            "rainfall_7d_mm": fallback_rainfall,
+            "rainfall_intensity_mm_h": fallback_rainfall,
+            "rainfall_source": "open-meteo-archive-fallback",
+        }
 
-            return 0.0
-
-        return round(
-            max(rainfall_values),
-            1,
-        )
-
-    except Exception as error:
-
-        print(
-            "Rainfall error:",
-            error,
-        )
-
-        return 0.0
+    except Exception as fallback_error:
+        print("Historical rainfall fallback error:", fallback_error)
+        return {
+            "rainfall_mm": 0.0,
+            "rainfall_current_mm": 0.0,
+            "rainfall_24h_mm": 0.0,
+            "rainfall_3d_mm": 0.0,
+            "rainfall_7d_mm": 0.0,
+            "rainfall_intensity_mm_h": 0.0,
+            "rainfall_source": "unavailable",
+        }
 
 
 # ---------------------------------------------------------
@@ -321,121 +407,53 @@ def get_slope(
     latitude,
     longitude,
 ):
+    """Calculate slope using the same batched terrain request."""
+    _, slope = get_terrain_features(latitude, longitude)
+    return slope
 
+
+def get_terrain_features(
+    latitude,
+    longitude,
+):
+    """Fetch center elevation and four neighboring elevations in one request."""
     offsets = [
-        (0.01, 0),
-        (-0.01, 0),
-        (0, 0.01),
-        (0, -0.01),
+        (0.0, 0.0),
+        (0.01, 0.0),
+        (-0.01, 0.0),
+        (0.0, 0.01),
+        (0.0, -0.01),
     ]
-
-    coordinates = [
-        (
-            latitude + dlat,
-            longitude + dlon,
-        )
-        for dlat, dlon in offsets
-    ]
+    coordinates = [(latitude + dlat, longitude + dlon) for dlat, dlon in offsets]
 
     try:
-
-        latitudes = ",".join(
-            str(point[0])
-            for point in coordinates
-        )
-
-        longitudes = ",".join(
-            str(point[1])
-            for point in coordinates
-        )
-
         response = requests.get(
             "https://api.open-meteo.com/v1/elevation",
             params={
-                "latitude": latitudes,
-                "longitude": longitudes,
+                "latitude": ",".join(str(point[0]) for point in coordinates),
+                "longitude": ",".join(str(point[1]) for point in coordinates),
             },
             timeout=10,
         )
-
         response.raise_for_status()
+        elevations = response.json().get("elevation", [])
+        if len(elevations) != 5:
+            return 500.0, 5.0
 
-        data = response.json()
+        elevation = float(elevations[0])
+        north, south = float(elevations[1]), float(elevations[2])
+        east, west = float(elevations[3]), float(elevations[4])
 
-        elevations = data.get(
-            "elevation",
-            [],
-        )
+        north_south_distance = 0.02 * 111000
+        east_west_distance = max(0.02 * 111000 * math.cos(math.radians(latitude)), 1.0)
+        north_south_gradient = abs(north - south) / north_south_distance
+        east_west_gradient = abs(east - west) / east_west_distance
+        slope_percent = math.sqrt(north_south_gradient ** 2 + east_west_gradient ** 2) * 100
 
-        if len(elevations) != 4:
-
-            return 5.0
-
-        north = float(
-            elevations[0]
-        )
-
-        south = float(
-            elevations[1]
-        )
-
-        east = float(
-            elevations[2]
-        )
-
-        west = float(
-            elevations[3]
-        )
-
-        north_south_distance = (
-            0.02 * 111000
-        )
-
-        east_west_distance = (
-            0.02
-            * 111000
-            * math.cos(
-                math.radians(
-                    latitude
-                )
-            )
-        )
-
-        north_south_gradient = (
-            abs(north - south)
-            / north_south_distance
-        )
-
-        east_west_gradient = (
-            abs(east - west)
-            / east_west_distance
-        )
-
-        gradient = math.sqrt(
-            north_south_gradient ** 2
-            + east_west_gradient ** 2
-        )
-
-        slope_percent = (
-            gradient * 100
-        )
-
-        return round(
-            min(
-                slope_percent,
-                60,
-            ),
-            2,
-        )
-
+        return elevation, round(min(slope_percent, 60), 2)
     except Exception as error:
-
-        print(
-            "Slope error:",
-            error,
-        )
-
-        return 5.0
+        print("Terrain error:", error)
+        return 500.0, 5.0
 
 
 # ---------------------------------------------------------
@@ -446,57 +464,36 @@ def get_environment(
     latitude,
     longitude,
 ):
+    cache_key = get_cache_key(latitude, longitude)
 
-    cache_key = get_cache_key(
-        latitude,
-        longitude,
-    )
+    cached_entry = environment_cache.get(cache_key)
+    if (
+        cached_entry
+        and time.time() - cached_entry["timestamp"] < ENVIRONMENT_CACHE_TTL_SECONDS
+    ):
+        print(f"Using cached environment for {cache_key}")
+        return cached_entry["data"]
 
-    if cache_key in environment_cache:
+    print(f"Fetching environment for {cache_key}")
 
-        print(
-            f"Using cached environment "
-            f"for {cache_key}"
-        )
-
-        return environment_cache[
-            cache_key
-        ]
-
-    print(
-        f"Fetching environment "
-        f"for {cache_key}"
-    )
-
-    elevation = get_elevation(
-        latitude,
-        longitude,
-    )
-
-    rainfall = get_rainfall(
-        latitude,
-        longitude,
-    )
-
-    slope = get_slope(
-        latitude,
-        longitude,
-    )
+    # These are independent network calls, so run them concurrently.
+    # Terrain also combines elevation + slope into a single API request.
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        rainfall_future = executor.submit(get_rainfall, latitude, longitude)
+        terrain_future = executor.submit(get_terrain_features, latitude, longitude)
+        rainfall = rainfall_future.result()
+        elevation, slope = terrain_future.result()
 
     environment = {
-
-        "rainfall": rainfall,
-
+        "rainfall": rainfall["rainfall_mm"],
+        **rainfall,
         "elevation": elevation,
-
         "slope": slope,
-
     }
-
-    environment_cache[
-        cache_key
-    ] = environment
-
+    environment_cache[cache_key] = {
+        "timestamp": time.time(),
+        "data": environment,
+    }
     return environment
 
 
@@ -551,104 +548,43 @@ def find_nearest_road(
     latitude,
     longitude,
 ):
-
-    if not roads:
-
+    if not road_tree:
         return None
+
+    point = Point(longitude, latitude)
+    search_box = box(
+        longitude - 0.15,
+        latitude - 0.15,
+        longitude + 0.15,
+        latitude + 0.15,
+    )
+    candidates = road_tree.query(search_box)
 
     best_road = None
     best_distance = float("inf")
 
-    # Limit the expensive search to a reasonable
-    # number of road records at a time.
-    #
-    # For the prototype this gives us a real
-    # infrastructure lookup without needing
-    # a large spatial database.
+    for candidate in candidates:
+        if isinstance(candidate, Integral):
+            index = int(candidate)
+            road_line = road_geometries[index]
+            road = road_records[index]
+        else:
+            road_line = candidate
+            road = road_geometry_lookup.get(id(road_line))
+            if road is None:
+                continue
 
-    for road in roads:
-
-        coordinates = road.get(
-            "coordinates",
-            [],
-        )
-
-        if not coordinates:
-
-            continue
-
-        # Quick bounding-box filter.
-        lons = [
-            point[0]
-            for point in coordinates
-        ]
-
-        lats = [
-            point[1]
-            for point in coordinates
-        ]
-
-        min_lon = min(lons)
-        max_lon = max(lons)
-        min_lat = min(lats)
-        max_lat = max(lats)
-
-        # Rough ~15 km search window.
-        lat_margin = 0.15
-
-        lon_margin = 0.15
-
-        if (
-            latitude < min_lat - lat_margin
-            or latitude > max_lat + lat_margin
-            or longitude < min_lon - lon_margin
-            or longitude > max_lon + lon_margin
-        ):
-
-            continue
-
-        road_line = LineString(
-            coordinates
-        )
-
-        point = Point(
-            longitude,
-            latitude,
-        )
-
-        # Approximate geographic distance.
-        nearest_point = road_line.interpolate(
-            road_line.project(point)
-        )
-
+        nearest_point = road_line.interpolate(road_line.project(point))
         distance = haversine_distance(
-            latitude,
-            longitude,
-            nearest_point.y,
-            nearest_point.x,
+            latitude, longitude, nearest_point.y, nearest_point.x
         )
 
         if distance < best_distance:
-
             best_distance = distance
-
             best_road = {
-
-                "name": (
-                    road.get("name")
-                    or "Unnamed road"
-                ),
-
-                "type": road.get(
-                    "type",
-                    "road",
-                ),
-
-                "distance_m": round(
-                    distance,
-                    1,
-                ),
-
+                "name": road.get("name") or "Unnamed road",
+                "type": road.get("type", "road"),
+                "distance_m": round(distance, 1),
             }
 
     return best_road
@@ -1034,6 +970,24 @@ def predict(
 
             "rainfall_mm":
                 rainfall,
+
+            "rainfall_current_mm":
+                environment["rainfall_current_mm"],
+
+            "rainfall_24h_mm":
+                environment["rainfall_24h_mm"],
+
+            "rainfall_3d_mm":
+                environment["rainfall_3d_mm"],
+
+            "rainfall_7d_mm":
+                environment["rainfall_7d_mm"],
+
+            "rainfall_intensity_mm_h":
+                environment["rainfall_intensity_mm_h"],
+
+            "rainfall_source":
+                environment["rainfall_source"],
 
             "elevation_m":
                 round(

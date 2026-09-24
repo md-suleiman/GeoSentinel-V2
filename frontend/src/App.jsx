@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
   CircleMarker,
+  Marker,
   Popup,
   useMap,
   useMapEvents,
 } from "react-leaflet";
 
 import "leaflet/dist/leaflet.css";
+import L from "leaflet";
 import "./App.css";
 
 
@@ -32,11 +34,20 @@ function MapFocusHandler({ location }) {
   useEffect(() => {
     if (!location) return;
 
-    map.flyTo(
-      [location.latitude, location.longitude],
-      Math.max(map.getZoom(), 10),
-      { duration: 0.8 }
-    );
+    const target = [location.latitude, location.longitude];
+    map.invalidateSize({ pan: false });
+    map.flyTo(target, Math.max(map.getZoom(), 10), { duration: 0.8 });
+
+    // The map can be hidden behind the authority overlay before this state
+    // changes. Recalculate Leaflet's size after the overlay is removed so
+    // View on Map never leaves a blank/white map.
+    const first = window.setTimeout(() => map.invalidateSize({ pan: false }), 80);
+    const second = window.setTimeout(() => map.invalidateSize({ pan: false }), 500);
+
+    return () => {
+      window.clearTimeout(first);
+      window.clearTimeout(second);
+    };
   }, [location, map]);
 
   return null;
@@ -133,12 +144,52 @@ function roadStatusClass(statusKey) {
 
 
 /* -------------------------------- */
+/* Early warning */
+/* -------------------------------- */
+
+
+/* -------------------------------- */
+/* Location-aware early warning overlay */
+/* -------------------------------- */
+
+function AlertOverlay({ alert, onDismiss, onViewMap }) {
+  if (!alert) return null;
+
+  const isConfirmed = alert.source === "verified";
+  const isReported = alert.source === "reported";
+  const alertTone = isConfirmed ? "confirmed" : isReported ? "reported" : "predicted";
+
+  return (
+    <div className={`threat-alert threat-alert-${alertTone}`} role="alert">
+      <div className="threat-alert-icon">{isConfirmed ? "🚨" : "⚠"}</div>
+      <div className="threat-alert-content">
+        <div className="threat-alert-kicker">{isConfirmed ? "VERIFIED EVENT" : isReported ? "FIELD REPORT" : "AI PREDICTION"}</div>
+        <h3>{alert.title}</h3>
+        <p>{alert.message}</p>
+        {alert.distanceText && <span className="threat-alert-distance">📍 {alert.distanceText}</span>}
+        {alert.score !== undefined && <span className="threat-alert-score">Risk Score: {alert.score}/100</span>}
+        <div className="threat-alert-actions">
+          {alert.latitude !== undefined && alert.longitude !== undefined && (
+            <button type="button" onClick={() => onViewMap(alert.latitude, alert.longitude)}>View on Map</button>
+          )}
+          <button type="button" className="threat-alert-dismiss" onClick={onDismiss}>Dismiss</button>
+        </div>
+      </div>
+      <button type="button" className="threat-alert-close" onClick={onDismiss} aria-label="Dismiss warning">×</button>
+    </div>
+  );
+}
+
+/* -------------------------------- */
 /* Authority response priority */
 /* -------------------------------- */
 
 function AuthorityPriority({ recentAnalyses, reports, onViewLocation }) {
   const analyses = (recentAnalyses || [])
-    .filter((analysis) => analysis?.result?.risk_level && analysis.result.risk_level !== "Not Applicable")
+    .filter((analysis) => {
+      const riskLevel = analysis?.result?.risk_level;
+      return riskLevel === "High" || riskLevel === "Medium";
+    })
     .map((analysis) => {
       const lat = Number(analysis.latitude);
       const lon = Number(analysis.longitude);
@@ -192,7 +243,7 @@ function AuthorityPriority({ recentAnalyses, reports, onViewLocation }) {
           </div>
         </div>
         <div className="admin-empty">
-          No analyzed locations yet. Analyze locations on the monitoring map to build the response queue.
+          No Medium or High risk locations yet. Analyze locations on the monitoring map to build the response queue.
         </div>
       </section>
     );
@@ -287,6 +338,28 @@ function haversineDistanceKm(lat1, lon1, lat2, lon2) {
 }
 
 
+function hasNearbyFieldReport(lat, lon, reports, radiusKm = 2) {
+  return (reports || []).some((report) => {
+    const status = report.status || "Pending";
+    if (status === "Rejected") return false;
+
+    const reportLat = Number(report.latitude);
+    const reportLon = Number(report.longitude);
+    if (!Number.isFinite(reportLat) || !Number.isFinite(reportLon)) return false;
+
+    const distanceKm = haversineDistanceKm(lat, lon, reportLat, reportLon);
+    return Number.isFinite(distanceKm) && distanceKm <= radiusKm;
+  });
+}
+
+function getRiskMarkerColor(riskLevel) {
+  if (riskLevel === "High") return "#dc2626";
+  if (riskLevel === "Medium") return "#f59e0b";
+  if (riskLevel === "Low") return "#16a34a";
+  return "#2563eb";
+}
+
+
 function getReportMarkerColor(report) {
   // Map marker colors match the field-report status:
   // Pending = orange, Verified = green, Rejected = red.
@@ -311,10 +384,15 @@ function AdminDashboard({
   onUpdateReportStatus,
   updatingId,
   onViewLocation,
+  onViewReport,
+  onLogout,
 }) {
+  const [activeTab, setActiveTab] = useState("overview");
   const pending = (reports || []).filter((report) => !report.status || report.status === "Pending").length;
   const verified = (reports || []).filter((report) => report.status === "Verified").length;
   const rejected = (reports || []).filter((report) => report.status === "Rejected").length;
+
+  const latestAnalyses = (recentAnalyses || []).slice(0, 5);
 
   return (
     <div className="admin-overlay">
@@ -334,39 +412,69 @@ function AdminDashboard({
               <div className="admin-subtitle">Incident verification and response prioritization</div>
             </div>
           </div>
-          <button className="admin-close" onClick={onClose}>✕ Close</button>
+          <div className="admin-header-actions">
+            <button type="button" className="admin-logout" onClick={onLogout}>↪ Logout</button>
+            <button type="button" className="admin-close" onClick={onClose}>✕ Close</button>
+          </div>
         </div>
 
         <div className="admin-body">
-          <div className="admin-stats">
-            <div className="admin-stat pending-stat">
-              <span>Pending Reports</span>
-              <strong>{pending}</strong>
-              <small>Awaiting verification</small>
-            </div>
-            <div className="admin-stat verified-stat">
-              <span>Verified</span>
-              <strong>{verified}</strong>
-              <small>Authority-confirmed</small>
-            </div>
-            <div className="admin-stat rejected-stat">
-              <span>Rejected</span>
-              <strong>{rejected}</strong>
-              <small>Excluded from evidence</small>
-            </div>
-            <div className="admin-stat risk-stat">
-              <span>Analyzed Locations</span>
-              <strong>{recentAnalyses.length}</strong>
-              <small>Available for prioritization</small>
-            </div>
+          <div className="admin-tabs" role="tablist" aria-label="Authority dashboard sections">
+            <button type="button" className={`admin-tab ${activeTab === "overview" ? "active" : ""}`} onClick={() => setActiveTab("overview")} role="tab" aria-selected={activeTab === "overview"}>Overview</button>
+            <button type="button" className={`admin-tab ${activeTab === "evidence" ? "active" : ""}`} onClick={() => setActiveTab("evidence")} role="tab" aria-selected={activeTab === "evidence"}>Field Evidence <span>{pending}</span></button>
+            <button type="button" className={`admin-tab ${activeTab === "priority" ? "active" : ""}`} onClick={() => setActiveTab("priority")} role="tab" aria-selected={activeTab === "priority"}>Response Priority</button>
           </div>
 
-          <div className="admin-content-stack">
+          {activeTab === "overview" && (
+            <div className="admin-overview-grid">
+              <section className="admin-card">
+                <div className="admin-card-heading">
+                  <div>
+                    <h2>Monitoring Overview</h2>
+                    <p>Current GeoSentinel activity available to the authority.</p>
+                  </div>
+                  <span className="admin-live-badge"><span /> Monitoring</span>
+                </div>
+                <div className="admin-overview-metrics">
+                  <div><span>Reports awaiting action</span><strong>{pending}</strong></div>
+                  <div><span>Verified field events</span><strong>{verified}</strong></div>
+                  <div><span>Locations analyzed</span><strong>{recentAnalyses.length}</strong></div>
+                </div>
+              </section>
+
+              <section className="admin-card">
+                <div className="admin-card-heading">
+                  <div>
+                    <h2>Recent Risk Assessments</h2>
+                    <p>Latest locations analyzed by the monitoring system.</p>
+                  </div>
+                </div>
+                {latestAnalyses.length === 0 ? (
+                  <div className="admin-empty">No analyzed locations yet.</div>
+                ) : (
+                  <div className="admin-mini-analysis-list">
+                    {latestAnalyses.map((analysis, index) => (
+                      <div className="admin-mini-analysis" key={`${analysis.latitude}-${analysis.longitude}-${index}`}>
+                        <div>
+                          <strong>{analysis.result?.risk_level || "Unknown"} Risk</strong>
+                          <span>{Number(analysis.latitude).toFixed(4)}, {Number(analysis.longitude).toFixed(4)}</span>
+                        </div>
+                        <div className="admin-mini-analysis-score">{analysis.result?.risk_score ?? "—"}/100</div>
+                        <button type="button" className="admin-small-map" onClick={() => onViewLocation(analysis)}>View on Map</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
+
+          {activeTab === "evidence" && (
             <section className="admin-card admin-queue-card">
               <div className="admin-card-heading">
                 <div>
                   <h2>Field Evidence Queue</h2>
-                  <p>Verify citizen observations before they become authority-confirmed evidence.</p>
+                  <p>Verify field observations before they become authority-confirmed evidence.</p>
                 </div>
                 <span className="admin-queue-count">{pending} pending</span>
               </div>
@@ -389,17 +497,16 @@ function AdminDashboard({
                           <div className="admin-report-coords">
                             📍 {Number(report.latitude).toFixed(4)}, {Number(report.longitude).toFixed(4)}
                           </div>
-                          {report.description ? (
-                            <p className="admin-report-description">{report.description}</p>
-                          ) : (
-                            <p className="admin-report-description admin-report-no-description">No description provided.</p>
-                          )}
+                          <p className={`admin-report-description ${report.description ? "" : "admin-report-no-description"}`}>
+                            {report.description || "No description provided."}
+                          </p>
                         </div>
 
                         <div className="admin-report-actions-column">
                           {isPending && (
                             <div className="admin-report-actions admin-report-actions-inline">
                               <button
+                                type="button"
                                 className="admin-verify"
                                 onClick={() => onUpdateReportStatus(report.id, "Verified")}
                                 disabled={updatingId === report.id}
@@ -407,6 +514,7 @@ function AdminDashboard({
                                 {updatingId === report.id ? "Updating..." : "✓ Verify"}
                               </button>
                               <button
+                                type="button"
                                 className="admin-reject"
                                 onClick={() => onUpdateReportStatus(report.id, "Rejected")}
                                 disabled={updatingId === report.id}
@@ -419,35 +527,39 @@ function AdminDashboard({
 
                         <div className="admin-report-media-column">
                           <span className={`admin-report-status ${statusClass}`}>{status}</span>
-                          {report.photo_url && (
-                            <button
-                              type="button"
-                              className="admin-view-image"
-                              onClick={() => {
-                                const photoUrl = report.photo_url.startsWith("http")
-                                  ? report.photo_url
-                                  : `http://127.0.0.1:8000${report.photo_url}`;
-                                window.open(photoUrl, "_blank", "noopener,noreferrer");
-                              }}
-                            >
-                              🖼 View Image
-                            </button>
-                          )}
+                          <div className="admin-report-media-actions">
+                            <button type="button" className="admin-view-map" onClick={() => onViewReport(report)}>⌖ View on Map</button>
+                            {report.photo_url && (
+                              <button
+                                type="button"
+                                className="admin-view-image"
+                                onClick={() => {
+                                  const photoUrl = report.photo_url.startsWith("http")
+                                    ? report.photo_url
+                                    : `http://127.0.0.1:8000${report.photo_url}`;
+                                  window.open(photoUrl, "_blank", "noopener,noreferrer");
+                                }}
+                              >
+                                🖼 View Image
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
               )}
-
             </section>
+          )}
 
+          {activeTab === "priority" && (
             <AuthorityPriority
               recentAnalyses={recentAnalyses}
               reports={reports}
               onViewLocation={onViewLocation}
             />
-          </div>
+          )}
 
           <div className="admin-footer-note">
             <span>🔒</span>
@@ -458,7 +570,6 @@ function AdminDashboard({
     </div>
   );
 }
-
 
 function FieldReportContent({
   latitude,
@@ -583,7 +694,7 @@ function FieldReportContent({
   );
 }
 
-function RecentAnalysesContent({ recentAnalyses, onSelect }) {
+function RecentAnalysesContent({ recentAnalyses, onSelect, onViewMap }) {
   if (recentAnalyses.length === 0) {
     return (
       <div className="recent-menu-empty">
@@ -597,22 +708,30 @@ function RecentAnalysesContent({ recentAnalyses, onSelect }) {
   return (
     <div className="recent-menu-list">
       {recentAnalyses.map((analysis, index) => (
-        <button
-          key={index}
-          type="button"
-          className="recent-analysis"
-          onClick={() => onSelect(analysis)}
-        >
-          <div>
-            <strong className={`recent-risk-${analysis.result.risk_level.toLowerCase()}`}>
-              {analysis.result.risk_level} Risk
-            </strong>
-            <span>
-              {analysis.latitude.toFixed(4)}, {analysis.longitude.toFixed(4)}
-            </span>
-          </div>
-          <strong>{analysis.result.risk_score}/100</strong>
-        </button>
+        <div className="recent-analysis-row" key={`${analysis.latitude}-${analysis.longitude}-${index}`}>
+          <button
+            type="button"
+            className="recent-analysis"
+            onClick={() => onSelect(analysis)}
+          >
+            <div>
+              <strong className={`recent-risk-${analysis.result.risk_level.toLowerCase()}`}>
+                {analysis.result.risk_level} Risk
+              </strong>
+              <span>
+                {analysis.latitude.toFixed(4)}, {analysis.longitude.toFixed(4)}
+              </span>
+            </div>
+            <strong>{analysis.result.risk_score}/100</strong>
+          </button>
+          <button
+            type="button"
+            className="recent-view-map-button"
+            onClick={() => onViewMap(analysis)}
+          >
+            View on Map
+          </button>
+        </div>
       ))}
     </div>
   );
@@ -627,10 +746,25 @@ function App() {
   const [longitudeInput, setLongitudeInput] = useState("94.1");
 
   const [result, setResult] = useState(null);
+  const [hasSelectedLocation, setHasSelectedLocation] = useState(false);
   const [loading, setLoading] = useState(false);
+  const analysisCacheRef = useRef(new Map(
+    (() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem("geosentinel_prediction_cache_v1") || "[]");
+        return Array.isArray(saved)
+          ? saved.filter((item) => item && item.key && item.result).map((item) => [item.key, item.result])
+          : [];
+      } catch {
+        return [];
+      }
+    })()
+  ));
+  const [showScoreExplanation, setShowScoreExplanation] = useState(false);
 
   const [historicalLandslides, setHistoricalLandslides] =
     useState([]);
+  const [showHistoricalLandslides, setShowHistoricalLandslides] = useState(false);
 
   const [recentAnalyses, setRecentAnalyses] = useState(() => {
     try {
@@ -656,8 +790,27 @@ function App() {
     }
   });
 
+  useEffect(() => {
+    const cache = analysisCacheRef.current;
+    (recentAnalyses || []).forEach((analysis) => {
+      const lat = Number(analysis.latitude);
+      const lon = Number(analysis.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lon) && analysis.result) {
+        cache.set(`${lat.toFixed(4)},${lon.toFixed(4)}`, analysis.result);
+      }
+    });
+  }, [recentAnalyses]);
+
   const [mapFocusLocation, setMapFocusLocation] = useState(null);
   const [locatingUser, setLocatingUser] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [activeThreatAlert, setActiveThreatAlert] = useState(null);
+  const [liveAnalysisEnabled, setLiveAnalysisEnabled] = useState(false);
+
+  const liveWatchIdRef = useRef(null);
+  const lastLiveLocationRef = useRef(null);
+  const lastLiveAnalysisTimeRef = useRef(0);
+  const liveAnalyzingRef = useRef(false);
 
   const [reports, setReports] = useState([]);
   const [reportType, setReportType] = useState("Landslide observed");
@@ -723,6 +876,190 @@ function App() {
     }
   }, [adminAuthenticated, adminDashboardOpen]);
 
+
+  /* -------------------------------- */
+  /* Location-aware warning engine */
+  /* -------------------------------- */
+
+  function triggerThreatAlert(alert, shouldNotifyPhone = false) {
+    if (!alert?.key) return;
+
+    setActiveThreatAlert(alert);
+
+    if (
+      shouldNotifyPhone &&
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      Notification.permission === "granted"
+    ) {
+      try {
+        new Notification(alert.title, {
+          body: alert.message,
+          tag: alert.key,
+        });
+      } catch (error) {
+        console.warn("Browser notification could not be shown:", error);
+      }
+    }
+  }
+
+  function evaluateLocationWarnings(
+    analyzedLat,
+    analyzedLon,
+    prediction,
+    isLiveMode = false,
+    locationOverride = null
+  ) {
+    if (!Number.isFinite(analyzedLat) || !Number.isFinite(analyzedLon)) return;
+
+    const effectiveUserLocation = locationOverride || userLocation;
+    const hasUserLocation = Boolean(
+      effectiveUserLocation &&
+      Number.isFinite(Number(effectiveUserLocation.latitude)) &&
+      Number.isFinite(Number(effectiveUserLocation.longitude))
+    );
+
+    const userDistanceToAnalyzed = hasUserLocation
+      ? haversineDistanceKm(
+          Number(effectiveUserLocation.latitude),
+          Number(effectiveUserLocation.longitude),
+          analyzedLat,
+          analyzedLon
+        )
+      : Infinity;
+
+    // Two explicit warning contexts:
+    // 1) User/Live mode: only warn for hazards genuinely near the device.
+    // 2) Manual analysis: warn for hazards at/near the location being inspected.
+    // This prevents a NER analysis from pretending to be a Bangalore warning.
+    const manualAnalysis = !isLiveMode && !locationOverride;
+    const safetyRadiusKm = 2;
+
+    const nearbyReport = (reports || [])
+      .filter((report) => {
+        const status = report.status || "Pending";
+        return (
+          status !== "Rejected" &&
+          Number.isFinite(Number(report.latitude)) &&
+          Number.isFinite(Number(report.longitude))
+        );
+      })
+      .map((report) => {
+        const distanceFromAnalyzed = haversineDistanceKm(
+          analyzedLat,
+          analyzedLon,
+          Number(report.latitude),
+          Number(report.longitude)
+        );
+        const distanceFromUser = hasUserLocation
+          ? haversineDistanceKm(
+              Number(effectiveUserLocation.latitude),
+              Number(effectiveUserLocation.longitude),
+              Number(report.latitude),
+              Number(report.longitude)
+            )
+          : Infinity;
+
+        return { ...report, distanceFromAnalyzed, distanceFromUser };
+      })
+      .filter((report) =>
+        manualAnalysis
+          ? Number.isFinite(report.distanceFromAnalyzed) && report.distanceFromAnalyzed <= safetyRadiusKm
+          : Number.isFinite(report.distanceFromUser) && report.distanceFromUser <= safetyRadiusKm
+      )
+      .sort((a, b) =>
+        manualAnalysis
+          ? a.distanceFromAnalyzed - b.distanceFromAnalyzed
+          : a.distanceFromUser - b.distanceFromUser
+      )[0];
+
+    if (nearbyReport) {
+      const type = String(nearbyReport.report_type || "field event").toLowerCase();
+      const isVerified = nearbyReport.status === "Verified";
+      const isLandslide = type.includes("landslide");
+      const distance = manualAnalysis
+        ? nearbyReport.distanceFromAnalyzed
+        : nearbyReport.distanceFromUser;
+
+      triggerThreatAlert(
+        {
+          key: `report-${nearbyReport.id}-${nearbyReport.status || "Pending"}-${Date.now()}`,
+          source: isVerified ? "verified" : "reported",
+          title: manualAnalysis
+            ? (isVerified
+                ? (isLandslide ? "Verified Landslide at Analyzed Location" : "Verified Hazard at Analyzed Location")
+                : "Reported Hazard at Analyzed Location")
+            : (isVerified
+                ? (isLandslide ? "Verified Landslide Near You" : "Verified Hazard Near You")
+                : "Reported Hazard Near You"),
+          message: manualAnalysis
+            ? (isVerified
+                ? "An authority-verified field event is recorded within 2 km of the location you are inspecting."
+                : "A field event is recorded within 2 km of the location you are inspecting. It is awaiting authority verification.")
+            : (isVerified
+                ? "An authority-verified field event has been recorded within 2 km of your location. Avoid the affected area and follow local safety instructions."
+                : "A field event has been reported within 2 km of your location. It is awaiting authority verification, so treat this as a precautionary warning."),
+          distanceText: manualAnalysis
+            ? `${formatDistance(distance * 1000)} from the analyzed location`
+            : `${formatDistance(distance * 1000)} from your location`,
+          latitude: Number(nearbyReport.latitude),
+          longitude: Number(nearbyReport.longitude),
+        },
+        isVerified && !manualAnalysis
+      );
+
+      return;
+    }
+
+    const score = Number(prediction?.risk_score) || 0;
+
+    // risk_score is a 0-100 risk score, not a calibrated probability.
+    // Use 90/100 as the high-confidence demo warning threshold rather than
+    // claiming that 90 means 90% probability.
+    const highConfidenceRisk =
+      score >= 90 &&
+      String(prediction?.risk_level || "").toLowerCase() === "high";
+
+    if (!highConfidenceRisk) return;
+
+    // Manual analysis is an explicit inspection, so it can warn even when
+    // the user is elsewhere. The wording therefore says "analyzed location".
+    if (manualAnalysis) {
+      triggerThreatAlert(
+        {
+          key: `ai-${analyzedLat.toFixed(5)}-${analyzedLon.toFixed(5)}-${Date.now()}`,
+          source: "predicted",
+          title: "Very High Landslide Risk",
+          message: "GeoSentinel AI has assigned a very high landslide risk score to the location you are inspecting. This is a risk advisory, not confirmation that a landslide is occurring.",
+          distanceText: "At the analyzed location",
+          score,
+          latitude: analyzedLat,
+          longitude: analyzedLon,
+        },
+        false
+      );
+      return;
+    }
+
+    // User/Live mode must have a real device location and be inside 2 km.
+    if (!hasUserLocation || !Number.isFinite(userDistanceToAnalyzed) || userDistanceToAnalyzed > safetyRadiusKm) {
+      return;
+    }
+
+    triggerThreatAlert(
+      {
+        key: `ai-${analyzedLat.toFixed(5)}-${analyzedLon.toFixed(5)}-${Date.now()}`,
+        source: "predicted",
+        title: "Very High Landslide Risk Near You",
+        message: "GeoSentinel AI has assigned a very high landslide risk score within 2 km of your location. This is a risk advisory, not confirmation that a landslide is occurring.",
+        distanceText: `${formatDistance(userDistanceToAnalyzed * 1000)} from your location`,
+        score,
+        latitude: analyzedLat,
+        longitude: analyzedLon,
+      },
+      false
+    );
+  }
 
   /* -------------------------------- */
   /* Load historical landslides */
@@ -792,92 +1129,245 @@ function App() {
   /* Analyze location */
   /* -------------------------------- */
 
-  async function analyzeLocation(
-    lat,
-    lon
-  ) {
+  async function analyzeLocation(lat, lon, options = {}) {
+    const analyzedLat = Number(lat);
+    const analyzedLon = Number(lon);
 
-    setLatitude(lat);
-    setLongitude(lon);
+    if (!Number.isFinite(analyzedLat) || !Number.isFinite(analyzedLon)) {
+      return null;
+    }
+
+    setLatitude(analyzedLat);
+    setLongitude(analyzedLon);
+    setHasSelectedLocation(true);
+
+    // A new analysis owns the screen. Clear both the old warning and old result
+    // immediately so the previous risk-colored marker cannot appear at the new location.
+    setActiveThreatAlert(null);
+    setResult(null);
+
+    // Reuse a prediction already calculated for the same 4-decimal location.
+    // This makes repeated clicks / Recent Analysis feel instant without changing
+    // the prediction itself.
+    const cacheKey = `${analyzedLat.toFixed(4)},${analyzedLon.toFixed(4)}`;
+    const cachedResult = analysisCacheRef.current.get(cacheKey);
+    if (cachedResult) {
+      setResult(cachedResult);
+      evaluateLocationWarnings(
+        analyzedLat,
+        analyzedLon,
+        cachedResult,
+        options.mode === "live",
+        options.locationOverride || null
+      );
+      return cachedResult;
+    }
 
     setLoading(true);
 
     try {
-
       const response = await fetch(
         "http://127.0.0.1:8000/predict",
         {
           method: "POST",
-
           headers: {
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
           },
-
           body: JSON.stringify({
-            latitude: Number(lat),
-            longitude: Number(lon),
+            latitude: analyzedLat,
+            longitude: analyzedLon,
           }),
         }
       );
 
-
       if (!response.ok) {
-
-        throw new Error(
-          "Prediction request failed"
-        );
-
+        throw new Error("Prediction request failed");
       }
 
-
-      const data =
-        await response.json();
-
-
+      const data = await response.json();
+      analysisCacheRef.current.set(cacheKey, data);
+      try {
+        const cacheEntries = Array.from(analysisCacheRef.current.entries())
+          .slice(-30)
+          .map(([key, result]) => ({ key, result }));
+        localStorage.setItem("geosentinel_prediction_cache_v1", JSON.stringify(cacheEntries));
+      } catch {
+        // Cache is only an optimization; prediction still works if storage fails.
+      }
       setResult(data);
 
-
-      /* Only save real risk analyses */
-
-      if (
-        data.risk_level !==
-        "Not Applicable"
-      ) {
-
-        setRecentAnalyses(
-          (previous) => [
-            {
-              id: `${Number(lat).toFixed(6)}-${Number(lon).toFixed(6)}-${Date.now()}`,
-              latitude: Number(lat),
-              longitude: Number(lon),
-              result: data,
-              analyzedAt: new Date().toISOString(),
-            },
-
-            ...previous,
-
-          ].slice(0, 20)
-        );
-
+      if (data.risk_level !== "Not Applicable") {
+        setRecentAnalyses((previous) => [
+          {
+            id: `${analyzedLat.toFixed(6)}-${analyzedLon.toFixed(6)}-${Date.now()}`,
+            latitude: analyzedLat,
+            longitude: analyzedLon,
+            result: data,
+            analyzedAt: new Date().toISOString(),
+          },
+          ...previous,
+        ].slice(0, 20));
       }
 
-    } catch (error) {
-
-      console.error(error);
-
-      alert(
-        "Could not connect to GeoSentinel API."
+      // Warnings are evaluated ONCE for this completed analysis.
+      // This intentionally does not live inside a useEffect, preventing
+      // React re-renders/report updates from creating an alert loop.
+      evaluateLocationWarnings(
+        analyzedLat,
+        analyzedLon,
+        data,
+        options.mode === "live",
+        options.locationOverride || null
       );
 
+      return data;
+    } catch (error) {
+      console.error(error);
+      alert("Could not connect to GeoSentinel API.");
+      return null;
     } finally {
-
       setLoading(false);
-
     }
-
   }
 
+
+  /* -------------------------------- */
+  /* Use device location */
+  /* -------------------------------- */
+
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      alert("Location access is not supported by this browser.");
+      return;
+    }
+
+    // This is deliberately a ONE-TIME GPS fix.
+    // Continuous monitoring is a separate explicit mode below.
+    if (liveWatchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(liveWatchIdRef.current);
+      liveWatchIdRef.current = null;
+      setLiveAnalysisEnabled(false);
+      lastLiveLocationRef.current = null;
+    }
+
+    setLocatingUser(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        const nextLocation = { latitude: lat, longitude: lon };
+
+        setLatitude(lat);
+        setLongitude(lon);
+        setUserLocation(nextLocation);
+        setMapFocusLocation(nextLocation);
+        setLocatingUser(false);
+
+        analyzeLocation(lat, lon, { mode: "user", locationOverride: nextLocation });
+      },
+      (error) => {
+        console.error("Could not access device location:", error);
+        setLocatingUser(false);
+
+        if (error.code === 1) {
+          alert("Location permission was denied. Please allow location access in your browser settings.");
+        } else {
+          alert("Could not determine your current location. Please try again.");
+        }
+      },
+      { enableHighAccuracy: false, timeout: 7000, maximumAge: 120000 }
+    );
+  }
+
+
+  /* -------------------------------- */
+  /* Live location analysis */
+  /* -------------------------------- */
+
+  function stopLiveAnalysis() {
+    if (liveWatchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(liveWatchIdRef.current);
+    }
+
+    liveWatchIdRef.current = null;
+    lastLiveLocationRef.current = null;
+    lastLiveAnalysisTimeRef.current = 0;
+    liveAnalyzingRef.current = false;
+    setLiveAnalysisEnabled(false);
+    setActiveThreatAlert(null);
+  }
+
+  function startLiveAnalysis() {
+    if (!navigator.geolocation) {
+      alert("Live location analysis is not supported by this browser.");
+      return;
+    }
+
+    if (liveWatchIdRef.current !== null) {
+      stopLiveAnalysis();
+      return;
+    }
+
+    setLiveAnalysisEnabled(true);
+    setActiveThreatAlert(null);
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        const now = Date.now();
+        const previous = lastLiveLocationRef.current;
+
+        // GPS can emit many callbacks per second. Only analyze when the
+        // user has moved meaningfully or enough time has passed.
+        if (previous) {
+          const movedKm = haversineDistanceKm(
+            previous.latitude,
+            previous.longitude,
+            lat,
+            lon
+          );
+
+          if (movedKm < 0.1 && now - lastLiveAnalysisTimeRef.current < 15000) {
+            return;
+          }
+        }
+
+        if (liveAnalyzingRef.current) return;
+
+        lastLiveLocationRef.current = { latitude: lat, longitude: lon };
+        lastLiveAnalysisTimeRef.current = now;
+        setUserLocation({ latitude: lat, longitude: lon });
+        setMapFocusLocation({ latitude: lat, longitude: lon });
+        liveAnalyzingRef.current = true;
+
+        analyzeLocation(lat, lon, {
+          mode: "live",
+          locationOverride: { latitude: lat, longitude: lon },
+        })
+          .finally(() => {
+            liveAnalyzingRef.current = false;
+          });
+      },
+      (error) => {
+        console.error("Live location error:", error);
+        stopLiveAnalysis();
+        alert("Live location analysis stopped because the device location could not be read.");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+    );
+
+    liveWatchIdRef.current = watchId;
+  }
+
+  useEffect(() => {
+    return () => {
+      if (liveWatchIdRef.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(liveWatchIdRef.current);
+      }
+    };
+  }, []);
 
   /* -------------------------------- */
   /* Use device location */
@@ -915,42 +1405,6 @@ function App() {
     setLatitudeInput(String(latitude));
     setLongitudeInput(String(longitude));
   }
-
-  function useMyLocation() {
-    if (!navigator.geolocation) {
-      alert("Location access is not supported by this browser.");
-      return;
-    }
-
-    setLocatingUser(true);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = position.coords.latitude;
-        const lon = position.coords.longitude;
-
-        setLatitude(lat);
-        setLongitude(lon);
-        setMapFocusLocation({ latitude: lat, longitude: lon });
-
-        // Automatically run the risk assessment for the user's current location.
-        analyzeLocation(lat, lon);
-        setLocatingUser(false);
-      },
-      (error) => {
-        console.error("Could not access device location:", error);
-        setLocatingUser(false);
-
-        if (error.code === 1) {
-          alert("Location permission was denied. Please allow location access in your browser settings.");
-        } else {
-          alert("Could not determine your current location. Please try again.");
-        }
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
-  }
-
 
   /* -------------------------------- */
   /* Field reports */
@@ -1100,20 +1554,6 @@ function App() {
 
     setAdminLoginError("Invalid admin credentials.");
   }
-
-
-  /* -------------------------------- */
-  /* Risk color */
-  /* -------------------------------- */
-
-  const riskColor =
-    result?.risk_level === "High"
-      ? "#dc2626"
-      : result?.risk_level === "Medium"
-      ? "#f59e0b"
-      : result?.risk_level === "Low"
-      ? "#16a34a"
-      : "#64748b";
 
 
   return (
@@ -1315,18 +1755,44 @@ function App() {
         <AdminDashboard
           reports={reports}
           recentAnalyses={recentAnalyses}
-          onClose={() => setAdminDashboardOpen(false)}
-          onUpdateReportStatus={updateReportStatus}
+           onClose={() => setAdminDashboardOpen(false)}
+           onLogout={() => {
+             setAdminAuthenticated(false);
+             setAdminDashboardOpen(false);
+             try {
+               localStorage.removeItem("geosentinel_admin_authenticated_v1");
+               localStorage.removeItem("geosentinel_admin_dashboard_open_v1");
+             } catch {}
+           }}
+           onUpdateReportStatus={updateReportStatus}
+           onViewReport={(report) => {
+             const reportLatitude = Number(report.latitude);
+             const reportLongitude = Number(report.longitude);
+             if (!Number.isFinite(reportLatitude) || !Number.isFinite(reportLongitude)) return;
+
+             setActiveThreatAlert(null);
+             setLatitude(reportLatitude);
+             setLongitude(reportLongitude);
+             setMapFocusLocation({ latitude: reportLatitude, longitude: reportLongitude });
+             setAdminDashboardOpen(false);
+           }}
           updatingId={reportUpdatingId}
           onViewLocation={(analysis) => {
-            setLatitude(analysis.lat);
-            setLongitude(analysis.lon);
-            setResult(analysis.result);
-            setMapFocusLocation({
-              latitude: analysis.lat,
-              longitude: analysis.lon,
-            });
+            const lat = Number(analysis.latitude ?? analysis.lat);
+            const lon = Number(analysis.longitude ?? analysis.lon);
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+            setActiveThreatAlert(null);
+            setLatitude(lat);
+            setLongitude(lon);
+            setHasSelectedLocation(true);
+            setResult(analysis.result || null);
             setAdminDashboardOpen(false);
+
+            // Let the dashboard close before Leaflet recalculates its size.
+            window.setTimeout(() => {
+              setMapFocusLocation({ latitude: lat, longitude: lon });
+            }, 80);
           }}
         />
       )}
@@ -1382,9 +1848,27 @@ function App() {
             <RecentAnalysesContent
               recentAnalyses={recentAnalyses}
               onSelect={(analysis) => {
+                setActiveThreatAlert(null);
                 setLatitude(analysis.latitude);
                 setLongitude(analysis.longitude);
+                setHasSelectedLocation(true);
                 setResult(analysis.result);
+                setMapFocusLocation({
+                  latitude: analysis.latitude,
+                  longitude: analysis.longitude,
+                });
+                setRecentMenuOpen(false);
+              }}
+              onViewMap={(analysis) => {
+                setActiveThreatAlert(null);
+                setLatitude(analysis.latitude);
+                setLongitude(analysis.longitude);
+                setHasSelectedLocation(true);
+                setResult(analysis.result);
+                setMapFocusLocation({
+                  latitude: analysis.latitude,
+                  longitude: analysis.longitude,
+                });
                 setRecentMenuOpen(false);
               }}
             />
@@ -1404,6 +1888,18 @@ function App() {
         {/* -------------------------------- */}
 
         <section className="map-section" style={{ position: "relative" }}>
+
+          <AlertOverlay
+            alert={activeThreatAlert}
+            onDismiss={() => setActiveThreatAlert(null)}
+            onViewMap={(alertLatitude, alertLongitude) => {
+              setLatitude(alertLatitude);
+              setLongitude(alertLongitude);
+              setHasSelectedLocation(true);
+              setMapFocusLocation({ latitude: alertLatitude, longitude: alertLongitude });
+              setActiveThreatAlert(null);
+            }}
+          />
 
           <MapContainer
             center={[27.5, 93.5]}
@@ -1430,7 +1926,7 @@ function App() {
             {/* Historical landslides */}
             {/* -------------------------------- */}
 
-            {historicalLandslides.map(
+            {showHistoricalLandslides && historicalLandslides.map(
               (point, index) => (
 
                 <CircleMarker
@@ -1561,56 +2057,61 @@ function App() {
 
             {/* -------------------------------- */}
             {/* Current selected location */}
+            {/* Blue marker = selected location, independent of risk color. */}
+            {/* It is rendered even while a new prediction is loading. */}
             {/* -------------------------------- */}
 
-            {result && (
-
-              <CircleMarker
-                center={[
-                  latitude,
-                  longitude,
-                ]}
-
-                radius={12}
-
-                pathOptions={{
-                  color: riskColor,
-                  fillColor: riskColor,
-                  fillOpacity: 0.75,
-                }}
-              >
-
-                <Popup>
-
-                  <strong>
-                    {result.risk_level}
-                  </strong>
-
-
-                  {result.risk_level !==
-                    "Not Applicable" && (
-
-                    <>
-
-                      <br />
-
-                      Risk Score:{" "}
-                      {result.risk_score}
-                      /100
-
-                    </>
-
-                  )}
-
-                </Popup>
-
-              </CircleMarker>
-
-            )}
-
+            {hasSelectedLocation && (
+          loading ? (
+            <Marker
+              position={[latitude, longitude]}
+              icon={L.divIcon({
+                className: "selected-analysis-blue-wrapper",
+                html: '<div class="selected-analysis-blue-dot"></div>',
+                iconSize: [18, 18],
+                iconAnchor: [9, 9],
+              })}
+            >
+              <Popup closeButton={true} className="geo-analysis-popup">
+                <div className="analysis-popup-content">
+                  <strong>Analyzing location...</strong>
+                </div>
+              </Popup>
+            </Marker>
+          ) : (
+            <CircleMarker
+              center={[latitude, longitude]}
+              radius={8}
+              pathOptions={{
+                color: "transparent",
+                fillColor: getRiskMarkerColor(result?.risk_level),
+                fillOpacity: 1,
+                weight: 0,
+              }}
+            >
+              <Popup closeButton={true} className="geo-analysis-popup">
+                <div className="analysis-popup-content">
+                  {result
+                    ? <strong>{result.risk_level} Risk — {result.risk_score}/100</strong>
+                    : <strong>Selected location</strong>}
+                </div>
+              </Popup>
+            </CircleMarker>
+          )
+        )}
 
 
           </MapContainer>
+
+          <button
+            type="button"
+            className={`historical-toggle ${showHistoricalLandslides ? "active" : ""}`}
+            onClick={() => setShowHistoricalLandslides((visible) => !visible)}
+            aria-pressed={showHistoricalLandslides}
+            title="Toggle historical landslide locations"
+          >
+            {showHistoricalLandslides ? "● History On" : "○ History"}
+          </button>
 
           <div className="map-legend" aria-label="Map legend">
             <div className="map-legend-title">Map Legend</div>
@@ -1733,14 +2234,25 @@ function App() {
 
 
             <div className="location-action-row">
-              <button
-                type="button"
-                className="use-location-button"
+              <div className="location-primary-actions">
+                <button
+                  type="button"
+                  className="use-location-button"
                 onClick={useMyLocation}
                 disabled={loading || locatingUser}
               >
                 {locatingUser ? "Finding location..." : "⌖ Use My Location"}
-              </button>
+                </button>
+
+                <button
+                  type="button"
+                  className={`live-analysis-button ${liveAnalysisEnabled ? "active" : ""}`}
+                onClick={startLiveAnalysis}
+                disabled={loading || locatingUser}
+              >
+                {liveAnalysisEnabled ? "◉ Stop Live Analysis" : "◎ Live Analysis"}
+                </button>
+              </div>
 
               <button
                 type="button"
@@ -1751,7 +2263,7 @@ function App() {
                     longitude
                   )
                 }
-                disabled={loading}
+                disabled={loading || liveAnalysisEnabled}
               >
                 {loading
                   ? "Analyzing..."
@@ -1915,27 +2427,26 @@ function App() {
                 {/* Explanation */}
                 {/* -------------------------------- */}
 
-                <div className="explanation">
+                <div className={`score-explanation ${showScoreExplanation ? "expanded" : ""}`}>
+                  <button
+                    type="button"
+                    className="score-explanation-toggle"
+                    onClick={() => setShowScoreExplanation((open) => !open)}
+                    aria-expanded={showScoreExplanation}
+                  >
+                    <span>Why this score?</span>
+                    <span className="score-explanation-chevron">{showScoreExplanation ? "⌃" : "⌄"}</span>
+                  </button>
 
-                  <h3>
-                    Why this score?
-                  </h3>
-
-
-                  <ul>
-
-                    {result.explanation.map(
-                      (reason, index) => (
-
-                        <li key={index}>
-                          {reason}
-                        </li>
-
-                      )
-                    )}
-
-                  </ul>
-
+                  {showScoreExplanation && (
+                    <div className="score-explanation-body">
+                      <ul>
+                        {result.explanation.map((reason, index) => (
+                          <li key={index}>{reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
 
 
@@ -2057,21 +2568,21 @@ function App() {
                         );
                       })()}
 
-                      {result.infrastructure
-                        .potentially_exposed_roads
-                        ?.length > 0 ? (
+                      {(() => {
+                        const exposureRelevant =
+                          result.risk_level === "High" ||
+                          hasNearbyFieldReport(latitude, longitude, reports, 2);
 
-                        <span className="infrastructure-exposed">
-                          ⚠ Potentially exposed
-                        </span>
-
-                      ) : (
-
-                        <span className="infrastructure-safe">
-                          ✓ No immediate exposure
-                        </span>
-
-                      )}
+                        return exposureRelevant ? (
+                          <span className="infrastructure-exposed">
+                            ⚠ Potential exposure
+                          </span>
+                        ) : (
+                          <span className="infrastructure-safe">
+                            ✓ No immediate exposure indicated
+                          </span>
+                        );
+                      })()}
 
                     </div>
 
@@ -2153,21 +2664,21 @@ function App() {
                       </div>
 
 
-                      {result.infrastructure
-                        .potentially_exposed_settlements
-                        ?.length > 0 ? (
+                      {(() => {
+                        const exposureRelevant =
+                          result.risk_level === "High" ||
+                          hasNearbyFieldReport(latitude, longitude, reports, 2);
 
-                        <span className="infrastructure-exposed">
-                          ⚠ Potentially exposed
-                        </span>
-
-                      ) : (
-
-                        <span className="infrastructure-safe">
-                          ✓ No immediate exposure
-                        </span>
-
-                      )}
+                        return exposureRelevant ? (
+                          <span className="infrastructure-exposed">
+                            ⚠ Potential exposure
+                          </span>
+                        ) : (
+                          <span className="infrastructure-safe">
+                            ✓ No immediate exposure indicated
+                          </span>
+                        );
+                      })()}
 
                     </div>
 
@@ -2186,25 +2697,6 @@ function App() {
                     </div>
 
                   )}
-
-
-                  {/* -------------------------------- */}
-                  {/* Interpretation */}
-                  {/* -------------------------------- */}
-
-                  <div className="infrastructure-note">
-
-                    <strong>
-                      ⚠ Interpretation
-                    </strong>
-
-                    "Potentially exposed" indicates
-                    proximity to a predicted risk area.
-                    Road connectivity is assessed separately
-                    from field reports and authority verification;
-                    proximity alone does not mean a road is blocked.
-
-                  </div>
 
                 </div>
 
