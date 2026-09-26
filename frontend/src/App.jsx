@@ -143,25 +143,21 @@ function roadStatusClass(statusKey) {
 }
 
 
-function EnvironmentalFactors({ environment, slope, riskScore, riskLevel }) {
+function EnvironmentalFactors({ environment, slope }) {
+  const [expanded, setExpanded] = useState(false);
+
   const environmentalFactors = [
     {
       label: "Rainfall duration",
-      value: "24 h monitoring window",
-      note: "Environmental factor",
-      icon: "◷",
+      value: "24 h",
     },
     {
       label: "Land cover / vegetation",
-      value: "Vegetation layer planned",
-      note: "Environmental factor",
-      icon: "◒",
+      value: "Vegetation layer",
     },
     {
       label: "Geological condition",
-      value: "Lithology layer planned",
-      note: "Environmental factor",
-      icon: "◇",
+      value: "Lithology layer",
     },
   ];
 
@@ -169,72 +165,70 @@ function EnvironmentalFactors({ environment, slope, riskScore, riskLevel }) {
     {
       label: "Terrain / landform",
       value: Number(slope) >= 15 ? "Steep hillside context" : "Hilly terrain context",
-      note: "Terrain factor",
-      icon: "⌁",
     },
     {
       label: "Drainage / topography",
-      value: "Topographic context planned",
-      note: "Hydrological factor",
-      icon: "⌄",
+      value: "Topographic context",
     },
   ];
 
+  const evidenceFactors = [
+    { label: "Historical events", value: "Regional history" },
+    { label: "Infrastructure exposure", value: "Roads & settlements" },
+    { label: "Field reports / evidence", value: "Verified observations" },
+  ];
+
+  function FactorPill({ label, value }) {
+    return (
+      <div className="factor-pill">
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+    );
+  }
+
   return (
     <section className="panel factors-panel">
-      <div className="factors-heading">
-        <div>
+      <button
+        type="button"
+        className="factors-toggle"
+        onClick={() => setExpanded((isOpen) => !isOpen)}
+        aria-expanded={expanded}
+      >
+        <span className="factors-toggle-copy">
           <span className="section-eyebrow">Composite risk assessment</span>
-          <h2>Multi-Factor Risk Analysis</h2>
-          <p className="muted">GeoSentinel brings together environmental conditions, terrain, historical context, infrastructure exposure, and field evidence.</p>
-        </div>
-        <span className="model-contract-badge">Multi-factor system</span>
-      </div>
+          <strong>Multi-Factor Risk Analysis</strong>
+          <small>Additional factors considered in the GeoSentinel assessment</small>
+        </span>
+        <span className="factors-toggle-chevron" aria-hidden="true">{expanded ? "⌃" : "⌄"}</span>
+      </button>
 
-      <div className="factor-group-label">Additional environmental factors</div>
-      <div className="factor-grid factor-grid-context">
-        <div className="factor-tile factor-tile-context">
-          <span className="factor-icon">≋</span>
-          <div><span>Antecedent rainfall</span><strong>{environment.rainfall_3d_mm} <small>mm / 3d</small></strong><em>7d total: {environment.rainfall_7d_mm} mm</em></div>
-        </div>
-        {environmentalFactors.map((factor) => (
-          <div className="factor-tile factor-tile-context" key={factor.label}>
-            <span className="factor-icon">{factor.icon}</span>
-            <div><span>{factor.label}</span><strong>{factor.value}</strong><em>{factor.note}</em></div>
+      {expanded && (
+        <div className="factors-expanded">
+          <div className="factor-group">
+            <h3>Environmental factors</h3>
+            <div className="factor-pill-row">
+              <FactorPill label="Antecedent rainfall" value={`${environment.rainfall_3d_mm} mm / 3d`} />
+              {environmentalFactors.map((factor) => <FactorPill key={factor.label} {...factor} />)}
+            </div>
           </div>
-        ))}
-      </div>
 
-      <div className="factor-group-label contextual-label">Additional terrain &amp; hydrological factors</div>
-      <div className="factor-grid factor-grid-context">
-        {terrainFactors.map((factor) => (
-          <div className="factor-tile factor-tile-context" key={factor.label}>
-            <span className="factor-icon">{factor.icon}</span>
-            <div><span>{factor.label}</span><strong>{factor.value}</strong><em>{factor.note}</em></div>
+          <div className="factor-group">
+            <h3>Terrain &amp; hydrological factors</h3>
+            <div className="factor-pill-row">
+              {terrainFactors.map((factor) => <FactorPill key={factor.label} {...factor} />)}
+              <FactorPill label="Satellite / remote sensing" value="Earth observation" />
+            </div>
           </div>
-        ))}
-        <div className="factor-tile factor-tile-context">
-          <span className="factor-icon">◌</span>
-          <div><span>Historical events</span><strong>Regional event history</strong><em>Historical context</em></div>
-        </div>
-        <div className="factor-tile factor-tile-context">
-          <span className="factor-icon">▣</span>
-          <div><span>Infrastructure exposure</span><strong>Roads &amp; settlements</strong><em>Exposure context</em></div>
-        </div>
-        <div className="factor-tile factor-tile-context">
-          <span className="factor-icon">◉</span>
-          <div><span>Field reports / evidence</span><strong>Verified observations</strong><em>Evidence context</em></div>
-        </div>
-      </div>
 
-      <div className="composite-assessment-flow">
-        <div className="composite-flow-label">Complete GeoSentinel assessment architecture</div>
-        <div className="composite-flow-line"><span>Core measurements</span><b>+</b><span>Additional factors</span><b>+</b><span>Historical context</span><b>+</b><span>Exposure &amp; evidence</span></div>
-        <div className="composite-flow-arrow">↓</div>
-        <strong className="composite-assessment-label">GeoSentinel Multi-Factor Risk Assessment</strong>
-        <div className="composite-flow-arrow">↓</div>
-        <div className="composite-result-line"><span>Risk Score / Risk Level</span><strong className={`composite-score ${String(riskLevel || "").toLowerCase()}`}>{riskScore}<small>/100</small></strong></div>
-      </div>
+          <div className="factor-group">
+            <h3>Context &amp; evidence</h3>
+            <div className="factor-pill-row">
+              {evidenceFactors.map((factor) => <FactorPill key={factor.label} {...factor} />)}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -2623,8 +2617,6 @@ function App() {
               <EnvironmentalFactors
                 environment={result.environment}
                 slope={result.environment.slope_percent}
-                riskScore={result.risk_score}
-                riskLevel={result.risk_level}
               />
 
               {/* ================================================= */}

@@ -4067,18 +4067,92 @@ button:disabled {
 .factors-panel {
   text-align: left;
   border-top: 3px solid #0f766e;
+  padding: 18px;
 }
 
-.factors-heading {
+.factors-toggle {
+  width: 100%;
+  margin: 0;
+  padding: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
 }
 
-.factors-heading h2 { margin: 5px 0 8px; font-size: 20px; }
-.section-eyebrow,
-.factor-group-label {
+.factors-toggle:hover:not(:disabled) { opacity: 1; }
+.factors-toggle-copy { display: grid; gap: 5px; min-width: 0; }
+.factors-toggle-copy strong { color: #0f172a; font-size: 20px; line-height: 1.2; }
+.factors-toggle-copy small { color: #64748b; font-size: 12px; line-height: 1.45; }
+.factors-toggle-chevron {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  color: #0f766e;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.factors-expanded {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.factor-group + .factor-group { margin-top: 22px; }
+.factor-group h3 {
+  margin: 0 0 10px;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.3;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.factor-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.factor-pill {
+  min-width: 145px;
+  flex: 1 1 145px;
+  padding: 11px 13px;
+  border: 1px solid #dbe4ec;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.factor-pill span {
+  display: block;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.factor-pill strong {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.factor-pill strong small { font-size: 10px; font-weight: 700; }
+
+.section-eyebrow {
   color: #0f766e;
   font-size: 10px;
   font-weight: 900;
@@ -4086,151 +4160,20 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.model-contract-badge {
-  flex: 0 0 auto;
-  padding: 6px 8px;
-  border-radius: 999px;
-  background: #ecfdf5;
-  color: #047857;
-  font-size: 10px;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.factor-group-label { margin: 26px 0 11px; color: #334155; letter-spacing: .06em; font-size: 11px; }
-.contextual-label { margin-top: 28px; color: #64748b; }
-
-.factor-grid { display: grid; gap: 8px; }
-.factor-grid-context { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
-.factor-tile {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  min-width: 0;
-  min-height: 76px;
-  padding: 14px;
-  border-radius: 10px;
-  border: 1px solid;
-}
-
-.factor-tile-live { background: #f0fdfa; border-color: #99f6e4; }
-.factor-tile-context { background: #f8fafc; border-color: #e2e8f0; }
-.factor-icon { color: #0f766e; font-size: 17px; line-height: 1.2; }
-.factor-tile-context .factor-icon { color: #64748b; }
-.factor-tile div { min-width: 0; }
-.factor-tile span:not(.factor-icon) { display: block; color: #475569; font-size: 11px; font-weight: 700; line-height: 1.3; }
-.factor-tile strong { display: block; margin-top: 5px; color: #0f172a; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
-.factor-tile strong small { font-size: 10px; font-weight: 700; }
-.factor-tile em { display: block; margin-top: 5px; color: #64748b; font-size: 10px; font-style: normal; line-height: 1.35; }
-
 .why-risk-framework { margin-bottom: 11px; padding: 10px; border-radius: 9px; background: #f8fafc; border: 1px solid #e2e8f0; }
 .why-risk-framework-heading { margin-bottom: 7px; color: #334155; font-size: 11px; font-weight: 900; }
 .why-risk-framework-grid { display: flex; flex-wrap: wrap; gap: 6px; }
 .why-risk-framework-grid span { padding: 5px 7px; border-radius: 999px; background: #ffffff; border: 1px solid #e2e8f0; color: #475569; font-size: 10px; font-weight: 700; }
 .why-risk-current-note { margin: 0 0 10px; color: #0f766e; font-size: 11px; font-weight: 700; line-height: 1.4; }
 
-.composite-assessment-flow {
-  margin-top: 18px;
-  padding: 13px 12px 12px;
-  border: 1px solid #99f6e4;
-  border-radius: 11px;
-  background: linear-gradient(135deg, #f0fdfa, #f8fafc);
-}
-
-.composite-flow-label {
-  color: #115e59;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-
-.composite-flow-line {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 12px;
-  color: #334155;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.composite-flow-line span {
-  padding: 7px 9px;
-  border-radius: 999px;
-  background: #ffffff;
-  border: 1px solid #ccfbf1;
-}
-
-.composite-flow-line i,
-.composite-flow-line b {
-  color: #0f766e;
-  font-style: normal;
-  font-size: 14px;
-}
-
-.composite-flow-arrow {
-  margin: 8px 0;
-  color: #0f766e;
-  font-size: 20px;
-  font-weight: 900;
-  line-height: 1;
-  text-align: center;
-}
-
-.composite-assessment-label {
-  display: block;
-  padding: 11px;
-  border-radius: 9px;
-  background: #0f766e;
-  color: #ffffff;
-  font-size: 13px;
-  line-height: 1.35;
-  text-align: center;
-}
-
-.composite-result-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.composite-score {
-  margin-left: auto;
-  padding: 7px 9px;
-  border-radius: 8px;
-  background: #0f766e;
-  color: #ffffff;
-  font-size: 17px;
-}
-
-.composite-score.high { background: #b91c1c; }
-.composite-score.medium { background: #b45309; }
-.composite-score.low { background: #15803d; }
-.composite-score small { margin-left: 2px; font-size: 9px; }
-
-.composite-flow-caption {
-  margin-top: 9px;
-  color: #64748b;
-  font-size: 10px;
-  line-height: 1.4;
-}
-
 .infrastructure-panel h2 { color: #0f172a; }
 .infrastructure-subtitle { text-align: left; }
 
 @media (max-width: 520px) {
-  .factors-heading { display: block; }
-  .model-contract-badge { display: inline-block; margin-top: 9px; }
-  .factor-grid-context { grid-template-columns: 1fr; }
+  .factors-toggle-copy strong { font-size: 18px; }
+  .factors-toggle-copy small { font-size: 11px; }
+  .factor-pill { flex-basis: 100%; }
   .why-risk-framework-grid { display: grid; grid-template-columns: 1fr 1fr; }
-  .composite-score { margin-left: 0; }
 }
 
 
