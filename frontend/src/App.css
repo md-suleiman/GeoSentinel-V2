@@ -2287,6 +2287,7 @@ button:disabled {
 .risk-low-dot { background: #16a34a; }
 .risk-medium-dot { background: #f59e0b; }
 .risk-high-dot { background: #dc2626; }
+.high-risk-analysis-dot { background: #991b1b; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25); }
 .report-unverified-dot { background: #dc2626; }
 .report-verified-dot { background: #16a34a; }
 
@@ -3606,6 +3607,16 @@ button:disabled {
   background: #f5f3ff !important;
   border-color: #c4b5fd !important;
   color: #6d28d9 !important;
+}
+
+.heatmap-toggle {
+  right: 126px;
+}
+
+.heatmap-toggle.active {
+  background: #fff1f2 !important;
+  border-color: #fda4af !important;
+  color: #be123c !important;
 }
 
 /* Collapsible "Why this score?" control. */

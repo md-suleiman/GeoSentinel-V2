@@ -11,6 +11,7 @@ import {
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
+import "leaflet.heat";
 import "./App.css";
 
 
@@ -49,6 +50,52 @@ function MapFocusHandler({ location }) {
       window.clearTimeout(second);
     };
   }, [location, map]);
+
+  return null;
+}
+
+
+function HighRiskHeatmap({ analyses, enabled }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+
+    const points = (analyses || [])
+      .filter((analysis) => {
+        const riskLevel = analysis?.result?.risk_level;
+        return (
+          riskLevel === "High" &&
+          Number.isFinite(Number(analysis.latitude)) &&
+          Number.isFinite(Number(analysis.longitude)) &&
+          Number.isFinite(Number(analysis.result?.risk_score))
+        );
+      })
+      .map((analysis) => [
+        Number(analysis.latitude),
+        Number(analysis.longitude),
+        Math.max(0, Math.min(1, Number(analysis.result.risk_score) / 100)),
+      ]);
+
+    if (points.length === 0) return undefined;
+
+    const heatLayer = L.heatLayer(points, {
+      radius: 32,
+      blur: 24,
+      maxZoom: 12,
+      max: 1,
+      gradient: {
+        0.25: "#fef08a",
+        0.5: "#f59e0b",
+        0.75: "#ef4444",
+        1: "#991b1b",
+      },
+    }).addTo(map);
+
+    return () => {
+      map.removeLayer(heatLayer);
+    };
+  }, [analyses, enabled, map]);
 
   return null;
 }
@@ -868,6 +915,7 @@ function App() {
   const [historicalLandslides, setHistoricalLandslides] =
     useState([]);
   const [showHistoricalLandslides, setShowHistoricalLandslides] = useState(false);
+  const [showHighRiskHeatmap, setShowHighRiskHeatmap] = useState(false);
 
   const [recentAnalyses, setRecentAnalyses] = useState(() => {
     try {
@@ -2080,6 +2128,10 @@ function App() {
             />
 
             <MapFocusHandler location={mapFocusLocation} />
+            <HighRiskHeatmap
+              analyses={recentAnalyses}
+              enabled={showHighRiskHeatmap}
+            />
 
 
             {/* -------------------------------- */}
@@ -2273,6 +2325,16 @@ function App() {
             {showHistoricalLandslides ? "● History On" : "○ History"}
           </button>
 
+          <button
+            type="button"
+            className={`historical-toggle heatmap-toggle ${showHighRiskHeatmap ? "active" : ""}`}
+            onClick={() => setShowHighRiskHeatmap((visible) => !visible)}
+            aria-pressed={showHighRiskHeatmap}
+            title="Toggle high-risk analysis heatmap"
+          >
+            {showHighRiskHeatmap ? "● High-Risk Areas On" : "○ High-Risk Areas"}
+          </button>
+
           <div className="map-legend" aria-label="Map legend">
             <div className="map-legend-title">Map Legend</div>
             <div className="map-legend-subtitle">Risk zones</div>
@@ -2287,6 +2349,10 @@ function App() {
             <div className="map-legend-item">
               <span className="map-legend-dot risk-high-dot" />
               <span>High risk</span>
+            </div>
+            <div className="map-legend-item">
+              <span className="map-legend-dot high-risk-analysis-dot" />
+              <span>High-Risk Analysis</span>
             </div>
             <div className="map-legend-divider" />
             <div className="map-legend-item">
