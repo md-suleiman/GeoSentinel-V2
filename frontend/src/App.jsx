@@ -223,7 +223,7 @@ function EnvironmentalFactors({ environment, slope }) {
             <h3>Terrain &amp; hydrological factors</h3>
             <div className="factor-pill-row">
               {terrainFactors.map((factor) => <FactorPill key={factor.label} {...factor} />)}
-              <FactorPill label="Satellite / remote sensing" value="Earth observation" />
+              <FactorPill label="Satellite / remote sensing" value="Vegetation · ground movement" />
             </div>
           </div>
 
