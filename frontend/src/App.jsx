@@ -2332,25 +2332,27 @@ function App() {
 
           </MapContainer>
 
-          <button
-            type="button"
-            className={`historical-toggle ${showHistoricalLandslides ? "active" : ""}`}
-            onClick={() => setShowHistoricalLandslides((visible) => !visible)}
-            aria-pressed={showHistoricalLandslides}
-            title="Toggle historical landslide locations"
-          >
-            {showHistoricalLandslides ? "● History On" : "○ History"}
-          </button>
+          <div className="map-toggle-group">
+            <button
+              type="button"
+              className={`historical-toggle ${showHistoricalLandslides ? "active" : ""}`}
+              onClick={() => setShowHistoricalLandslides((visible) => !visible)}
+              aria-pressed={showHistoricalLandslides}
+              title="Toggle historical landslide locations"
+            >
+              {showHistoricalLandslides ? "● History On" : "○ History"}
+            </button>
 
-          <button
-            type="button"
-            className={`historical-toggle heatmap-toggle ${showHighRiskHeatmap ? "active" : ""}`}
-            onClick={() => setShowHighRiskHeatmap((visible) => !visible)}
-            aria-pressed={showHighRiskHeatmap}
-            title="Toggle high-risk analysis heatmap"
-          >
-            {showHighRiskHeatmap ? "● High-Risk Areas On" : "○ High-Risk Areas"}
-          </button>
+            <button
+              type="button"
+              className={`historical-toggle heatmap-toggle ${showHighRiskHeatmap ? "active" : ""}`}
+              onClick={() => setShowHighRiskHeatmap((visible) => !visible)}
+              aria-pressed={showHighRiskHeatmap}
+              title="Toggle high-risk analysis heatmap"
+            >
+              {showHighRiskHeatmap ? "● High-Risk Areas On" : "○ High-Risk Areas"}
+            </button>
+          </div>
 
           <div className="map-legend" aria-label="Map legend">
             <div className="map-legend-title">Map Legend</div>

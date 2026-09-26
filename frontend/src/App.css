@@ -3583,11 +3583,19 @@ button:disabled {
    MAIN FEATURE POLISH
    ========================================================= */
 
-/* Compact historical layer toggle: intentionally separate from the legend. */
-.historical-toggle {
+/* Compact map layer toggles: intentionally separate from the legend. */
+.map-toggle-group {
   position: absolute;
   top: 12px;
   right: 12px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.historical-toggle {
+  position: static;
   z-index: 1000;
   width: auto !important;
   margin: 0 !important;
@@ -3607,10 +3615,6 @@ button:disabled {
   background: #f5f3ff !important;
   border-color: #c4b5fd !important;
   color: #6d28d9 !important;
-}
-
-.heatmap-toggle {
-  right: 126px;
 }
 
 .heatmap-toggle.active {
@@ -3852,9 +3856,13 @@ button:disabled {
 }
 
 @media (max-width: 520px) {
-  .historical-toggle {
+  .map-toggle-group {
     top: 8px;
     right: 8px;
+    gap: 6px;
+  }
+
+  .historical-toggle {
     padding: 6px 8px !important;
   }
 
