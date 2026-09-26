@@ -143,6 +143,85 @@ function roadStatusClass(statusKey) {
 }
 
 
+function EnvironmentalFactors({ environment, slope }) {
+  const contextualFactors = [
+    {
+      label: "Rainfall duration",
+      value: "24 h monitoring window",
+      note: "Contextual layer",
+      icon: "◷",
+    },
+    {
+      label: "Land cover / vegetation",
+      value: "Vegetation layer planned",
+      note: "Demo context",
+      icon: "◒",
+    },
+    {
+      label: "Geological condition",
+      value: "Lithology layer planned",
+      note: "Demo context",
+      icon: "◇",
+    },
+    {
+      label: "Terrain / landform",
+      value: Number(slope) >= 15 ? "Steep hillside context" : "Hilly terrain context",
+      note: "Derived context",
+      icon: "⌁",
+    },
+    {
+      label: "Drainage / topography",
+      value: "Topographic context planned",
+      note: "Demo context",
+      icon: "⌄",
+    },
+  ];
+
+  return (
+    <section className="panel factors-panel">
+      <div className="factors-heading">
+        <div>
+          <span className="section-eyebrow">Risk drivers</span>
+          <h2>Environmental &amp; Terrain Factors</h2>
+          <p className="muted">Live measurements anchor the current model. Additional layers support the broader GeoSentinel framework.</p>
+        </div>
+        <span className="model-contract-badge">4 model inputs</span>
+      </div>
+
+      <div className="factor-group-label">Current ML inputs</div>
+      <div className="factor-grid factor-grid-live">
+        <div className="factor-tile factor-tile-live">
+          <span className="factor-icon">☔</span>
+          <div><span>Rainfall intensity</span><strong>{environment.rainfall_intensity_mm_h} <small>mm/h</small></strong><em>Live precipitation</em></div>
+        </div>
+        <div className="factor-tile factor-tile-live">
+          <span className="factor-icon">≋</span>
+          <div><span>Antecedent rainfall</span><strong>{environment.rainfall_3d_mm} <small>mm / 3d</small></strong><em>7d total: {environment.rainfall_7d_mm} mm</em></div>
+        </div>
+        <div className="factor-tile factor-tile-live">
+          <span className="factor-icon">◉</span>
+          <div><span>Soil moisture</span><strong>{environment.soil_moisture ?? "—"}</strong><em>0–7 cm hourly mean</em></div>
+        </div>
+        <div className="factor-tile factor-tile-live">
+          <span className="factor-icon">▲</span>
+          <div><span>Elevation / slope</span><strong>{environment.elevation_m} <small>m</small> · {environment.slope_percent}<small>%</small></strong><em>Terrain measurements</em></div>
+        </div>
+      </div>
+
+      <div className="factor-group-label contextual-label">Broader framework context</div>
+      <div className="factor-grid factor-grid-context">
+        {contextualFactors.map((factor) => (
+          <div className="factor-tile factor-tile-context" key={factor.label}>
+            <span className="factor-icon">{factor.icon}</span>
+            <div><span>{factor.label}</span><strong>{factor.value}</strong><em>{factor.note}</em></div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+
 /* -------------------------------- */
 /* Early warning */
 /* -------------------------------- */
@@ -164,10 +243,16 @@ function AlertOverlay({ alert, onDismiss, onViewMap }) {
       <div className="threat-alert-icon">{isConfirmed ? "🚨" : "⚠"}</div>
       <div className="threat-alert-content">
         <div className="threat-alert-kicker">{isConfirmed ? "VERIFIED EVENT" : isReported ? "FIELD REPORT" : "AI PREDICTION"}</div>
-        <h3>{alert.title}</h3>
+        <h3>{isConfirmed || isReported ? alert.title : "HIGH RISK"}</h3>
+        {!isConfirmed && !isReported && <div className="threat-alert-score-heading">Major landslide warning</div>}
         <p>{alert.message}</p>
         {alert.distanceText && <span className="threat-alert-distance">📍 {alert.distanceText}</span>}
+        {alert.latitude !== undefined && alert.longitude !== undefined && <span className="threat-alert-location">Location: {Number(alert.latitude).toFixed(4)}, {Number(alert.longitude).toFixed(4)}</span>}
         {alert.score !== undefined && <span className="threat-alert-score">Risk Score: {alert.score}/100</span>}
+        {alert.drivers?.length > 0 && (
+          <div className="threat-alert-drivers"><strong>Main risk drivers</strong><span>{alert.drivers.join(" · ")}</span></div>
+        )}
+        {alert.action && <div className="threat-alert-action"><strong>Recommended action</strong><span>{alert.action}</span></div>}
         <div className="threat-alert-actions">
           {alert.latitude !== undefined && alert.longitude !== undefined && (
             <button type="button" onClick={() => onViewMap(alert.latitude, alert.longitude)}>View on Map</button>
@@ -1033,6 +1118,12 @@ function App() {
           message: "GeoSentinel AI has assigned a very high landslide risk score to the location you are inspecting. This is a risk advisory, not confirmation that a landslide is occurring.",
           distanceText: "At the analyzed location",
           score,
+          drivers: [
+            prediction.environment?.rainfall_24h_mm != null ? `${prediction.environment.rainfall_24h_mm} mm rainfall / 24h` : "Recent rainfall",
+            prediction.environment?.soil_moisture != null ? "Elevated soil moisture" : "Terrain conditions",
+            prediction.environment?.slope_percent != null ? `${prediction.environment.slope_percent}% slope` : "Terrain exposure",
+          ],
+          action: "Review the location on the map and follow local authority guidance.",
           latitude: analyzedLat,
           longitude: analyzedLon,
         },
@@ -1054,6 +1145,12 @@ function App() {
         message: "GeoSentinel AI has assigned a very high landslide risk score within 2 km of your location. This is a risk advisory, not confirmation that a landslide is occurring.",
         distanceText: `${formatDistance(userDistanceToAnalyzed * 1000)} from your location`,
         score,
+        drivers: [
+          prediction.environment?.rainfall_24h_mm != null ? `${prediction.environment.rainfall_24h_mm} mm rainfall / 24h` : "Recent rainfall",
+          prediction.environment?.soil_moisture != null ? "Elevated soil moisture" : "Terrain conditions",
+          prediction.environment?.slope_percent != null ? `${prediction.environment.slope_percent}% slope` : "Terrain exposure",
+        ],
+        action: "Move away from exposed slopes and follow local authority guidance.",
         latitude: analyzedLat,
         longitude: analyzedLon,
       },
@@ -2115,6 +2212,20 @@ function App() {
 
           <div className="map-legend" aria-label="Map legend">
             <div className="map-legend-title">Map Legend</div>
+            <div className="map-legend-subtitle">Risk zones</div>
+            <div className="map-legend-item">
+              <span className="map-legend-dot risk-low-dot" />
+              <span>Low risk</span>
+            </div>
+            <div className="map-legend-item">
+              <span className="map-legend-dot risk-medium-dot" />
+              <span>Medium risk</span>
+            </div>
+            <div className="map-legend-item">
+              <span className="map-legend-dot risk-high-dot" />
+              <span>High risk</span>
+            </div>
+            <div className="map-legend-divider" />
             <div className="map-legend-item">
               <span className="map-legend-dot historical-dot" />
               <span>Historical Landslide</span>
@@ -2440,6 +2551,17 @@ function App() {
 
                   {showScoreExplanation && (
                     <div className="score-explanation-body">
+                      <div className="why-risk-framework">
+                        <div className="why-risk-framework-heading">GeoSentinel combines</div>
+                        <div className="why-risk-framework-grid">
+                          <span>☔ Environmental conditions</span>
+                          <span>▲ Terrain</span>
+                          <span>◷ Historical context</span>
+                          <span>▣ Infrastructure exposure</span>
+                          <span>◉ Field evidence</span>
+                        </div>
+                      </div>
+                      <div className="why-risk-current-note">Current score and prediction remain based on the live four-feature ML model.</div>
                       <ul>
                         {result.explanation.map((reason, index) => (
                           <li key={index}>{reason}</li>
@@ -2472,6 +2594,11 @@ function App() {
 
               </div>
 
+              <EnvironmentalFactors
+                environment={result.environment}
+                slope={result.environment.slope_percent}
+              />
+
               {/* ================================================= */}
               {/* INFRASTRUCTURE IMPACT */}
               {/* ================================================= */}
@@ -2481,13 +2608,12 @@ function App() {
                 <div className="panel infrastructure-panel">
 
                   <h2>
-                    Infrastructure Impact
+                    Potentially Exposed Infrastructure
                   </h2>
 
 
                   <p className="infrastructure-subtitle">
-                    Nearby infrastructure that may
-                    be exposed to this risk.
+                    Roads and settlements near the analyzed location. Proximity indicates potential exposure, not confirmed damage.
                   </p>
 
 
