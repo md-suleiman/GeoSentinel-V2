@@ -4793,11 +4793,6 @@ button:disabled {
 
 @media (max-width: 900px) {
   .sidebar {
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    box-sizing: border-box !important;
     padding-inline: 12px !important;
   }
 }
-
