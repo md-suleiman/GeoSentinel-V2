@@ -1115,7 +1115,7 @@ function AdminDashboard({
                                 onClick={() => {
                                   const photoUrl = report.photo_url.startsWith("http")
                                     ? report.photo_url
-                                    : `http://https://geosentinel-gqep.onrender.com${report.photo_url}`;
+                                    : `https://geosentinel-gqep.onrender.com${report.photo_url}`;
                                   window.open(photoUrl, "_blank", "noopener,noreferrer");
                                 }}
                               >
@@ -1770,7 +1770,7 @@ function App() {
       const batch = grid.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
         batch.map(([lat, lon]) =>
-          fetch("http://https://geosentinel-gqep.onrender.com/predict", {
+          fetch("https://geosentinel-gqep.onrender.com/predict", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ latitude: lat, longitude: lon }),
@@ -1876,7 +1876,7 @@ function App() {
 
     try {
       const response = await fetch(
-        "http://https://geosentinel-gqep.onrender.com/predict",
+        "https://geosentinel-gqep.onrender.com/predict",
         {
           method: "POST",
           headers: {
@@ -2192,7 +2192,7 @@ function App() {
 
   async function loadReports() {
     try {
-      const response = await fetch("http://https://geosentinel-gqep.onrender.com/reports");
+      const response = await fetch("https://geosentinel-gqep.onrender.com/reports");
 
       if (!response.ok) {
         throw new Error("Could not load reports");
@@ -2237,7 +2237,7 @@ function App() {
       }
 
       const response = await fetch(
-        "http://https://geosentinel-gqep.onrender.com/reports",
+        "https://geosentinel-gqep.onrender.com/reports",
         {
           method: "POST",
           headers: {
@@ -2289,7 +2289,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `http://https://geosentinel-gqep.onrender.com/reports/${reportId}`,
+        `https://geosentinel-gqep.onrender.com/reports/${reportId}`,
         {
           method: "PATCH",
           headers: {
@@ -2912,7 +2912,7 @@ function App() {
                             src={
                               report.photo_url.startsWith("http")
                                 ? report.photo_url
-                                : `http://https://geosentinel-gqep.onrender.com${report.photo_url}`
+                                : `https://geosentinel-gqep.onrender.com${report.photo_url}`
                             }
                             alt={`Field report ${report.id}`}
                             style={{
