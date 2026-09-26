@@ -57,44 +57,61 @@ function MapFocusHandler({ location }) {
 
 function HighRiskHeatmap({ analyses, enabled }) {
   const map = useMap();
+  const heatLayerRef = useRef(null);
+
+  useEffect(() => () => {
+    if (heatLayerRef.current) {
+      map.removeLayer(heatLayerRef.current);
+      heatLayerRef.current = null;
+    }
+  }, [map]);
 
   useEffect(() => {
-    if (!enabled) return undefined;
-
     const points = (analyses || [])
       .filter((analysis) => {
-        const riskLevel = analysis?.result?.risk_level;
+        const riskScore = Number(analysis?.result?.risk_score);
         return (
-          riskLevel === "High" &&
+          Number.isFinite(riskScore) &&
+          riskScore >= 70 &&
           Number.isFinite(Number(analysis.latitude)) &&
-          Number.isFinite(Number(analysis.longitude)) &&
-          Number.isFinite(Number(analysis.result?.risk_score))
+          Number.isFinite(Number(analysis.longitude))
         );
       })
-      .map((analysis) => [
-        Number(analysis.latitude),
-        Number(analysis.longitude),
-        Math.max(0, Math.min(1, Number(analysis.result.risk_score) / 100)),
-      ]);
+      .map((analysis) => {
+        const riskScore = Number(analysis.result.risk_score);
+        const intensity = 0.35 + ((Math.min(riskScore, 100) - 70) / 30) * 0.65;
+        return [
+          Number(analysis.latitude),
+          Number(analysis.longitude),
+          Math.max(0.35, Math.min(1, intensity)),
+        ];
+      });
 
-    if (points.length === 0) return undefined;
+    if (!enabled) {
+      if (heatLayerRef.current) {
+        map.removeLayer(heatLayerRef.current);
+        heatLayerRef.current = null;
+      }
+      return;
+    }
 
-    const heatLayer = L.heatLayer(points, {
-      radius: 32,
-      blur: 24,
-      maxZoom: 12,
+    if (!heatLayerRef.current) {
+      heatLayerRef.current = L.heatLayer([], {
+        radius: 32,
+        blur: 24,
+        maxZoom: 18,
+        minOpacity: 0.45,
       max: 1,
-      gradient: {
-        0.25: "#fef08a",
-        0.5: "#f59e0b",
-        0.75: "#ef4444",
-        1: "#991b1b",
-      },
-    }).addTo(map);
+        gradient: {
+          0.25: "#fef08a",
+          0.5: "#f59e0b",
+          0.75: "#ef4444",
+          1: "#991b1b",
+        },
+      }).addTo(map);
+    }
 
-    return () => {
-      map.removeLayer(heatLayer);
-    };
+    heatLayerRef.current.setLatLngs(points);
   }, [analyses, enabled, map]);
 
   return null;
