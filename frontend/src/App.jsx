@@ -11,7 +11,6 @@ import {
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import "leaflet.heat";
 import "./App.css";
 
 
@@ -55,66 +54,52 @@ function MapFocusHandler({ location }) {
 }
 
 
-function HighRiskHeatmap({ analyses, enabled }) {
-  const map = useMap();
-  const heatLayerRef = useRef(null);
+function HighRiskAnalysisMarkers({ analyses, enabled }) {
+  if (!enabled) return null;
 
-  useEffect(() => () => {
-    if (heatLayerRef.current) {
-      map.removeLayer(heatLayerRef.current);
-      heatLayerRef.current = null;
-    }
-  }, [map]);
+  return (
+    <>
+      {(analyses || [])
+        .filter((analysis) => {
+          const riskScore = Number(analysis?.result?.risk_score);
+          return (
+            Number.isFinite(riskScore) &&
+            riskScore >= 70 &&
+            Number.isFinite(Number(analysis.latitude)) &&
+            Number.isFinite(Number(analysis.longitude))
+          );
+        })
+        .map((analysis, index) => {
+          const riskScore = Number(analysis.result.risk_score);
+          const latitude = Number(analysis.latitude);
+          const longitude = Number(analysis.longitude);
 
-  useEffect(() => {
-    const points = (analyses || [])
-      .filter((analysis) => {
-        const riskScore = Number(analysis?.result?.risk_score);
-        return (
-          Number.isFinite(riskScore) &&
-          riskScore >= 70 &&
-          Number.isFinite(Number(analysis.latitude)) &&
-          Number.isFinite(Number(analysis.longitude))
-        );
-      })
-      .map((analysis) => {
-        const riskScore = Number(analysis.result.risk_score);
-        const intensity = 0.35 + ((Math.min(riskScore, 100) - 70) / 30) * 0.65;
-        return [
-          Number(analysis.latitude),
-          Number(analysis.longitude),
-          Math.max(0.35, Math.min(1, intensity)),
-        ];
-      });
-
-    if (!enabled) {
-      if (heatLayerRef.current) {
-        map.removeLayer(heatLayerRef.current);
-        heatLayerRef.current = null;
-      }
-      return;
-    }
-
-    if (!heatLayerRef.current) {
-      heatLayerRef.current = L.heatLayer([], {
-        radius: 32,
-        blur: 24,
-        maxZoom: 18,
-        minOpacity: 0.45,
-      max: 1,
-        gradient: {
-          0.25: "#fef08a",
-          0.5: "#f59e0b",
-          0.75: "#ef4444",
-          1: "#991b1b",
-        },
-      }).addTo(map);
-    }
-
-    heatLayerRef.current.setLatLngs(points);
-  }, [analyses, enabled, map]);
-
-  return null;
+          return (
+            <CircleMarker
+              key={`high-risk-analysis-${analysis.id || `${latitude}-${longitude}-${index}`}`}
+              center={[latitude, longitude]}
+              radius={8}
+              pathOptions={{
+                color: "transparent",
+                fillColor: getRiskMarkerColor("High"),
+                fillOpacity: 1,
+                weight: 0,
+              }}
+              eventHandlers={{
+                mouseover: (event) => event.target.openPopup(),
+                mouseout: (event) => event.target.closePopup(),
+              }}
+            >
+              <Popup>
+                <strong>High Risk</strong>
+                <br />
+                Risk Score: {riskScore}/100
+              </Popup>
+            </CircleMarker>
+          );
+        })}
+    </>
+  );
 }
 
 
@@ -2160,7 +2145,7 @@ function App() {
             />
 
             <MapFocusHandler location={mapFocusLocation} />
-            <HighRiskHeatmap
+            <HighRiskAnalysisMarkers
               analyses={recentAnalyses}
               enabled={showHighRiskHeatmap}
             />
