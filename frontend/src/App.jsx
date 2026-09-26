@@ -150,14 +150,17 @@ function EnvironmentalFactors({ environment, slope }) {
     {
       label: "Rainfall duration",
       value: "24 h",
+      icon: "◷",
     },
     {
       label: "Land cover / vegetation",
       value: "Vegetation layer",
+      icon: "❧",
     },
     {
       label: "Geological condition",
       value: "Lithology layer",
+      icon: "◇",
     },
   ];
 
@@ -165,22 +168,25 @@ function EnvironmentalFactors({ environment, slope }) {
     {
       label: "Terrain / landform",
       value: Number(slope) >= 15 ? "Steep hillside context" : "Hilly terrain context",
+      icon: "▲",
     },
     {
       label: "Drainage / topography",
       value: "Topographic context",
+      icon: "≋",
     },
   ];
 
   const evidenceFactors = [
-    { label: "Historical events", value: "Regional history" },
-    { label: "Infrastructure exposure", value: "Roads & settlements" },
-    { label: "Field reports / evidence", value: "Verified observations" },
+    { label: "Historical events", value: "Regional history", icon: "◷" },
+    { label: "Infrastructure exposure", value: "Roads & settlements", icon: "▣" },
+    { label: "Field reports / evidence", value: "Verified observations", icon: "✓" },
   ];
 
-  function FactorPill({ label, value }) {
+  function FactorPill({ label, value, icon }) {
     return (
       <div className="factor-pill">
+        <span className="factor-pill-icon" aria-hidden="true">{icon}</span>
         <span>{label}</span>
         <strong>{value}</strong>
       </div>
@@ -200,13 +206,7 @@ function EnvironmentalFactors({ environment, slope }) {
           <strong>Multi-Factor Risk Analysis</strong>
           <small>Additional factors considered in the GeoSentinel assessment</small>
         </span>
-        <span className="factors-toggle-mark" aria-hidden="true">
-          <svg viewBox="0 0 64 52">
-            <path d="M4 48 25 8l10 18 9-14 16 36" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="m37 39 6 6 14-17" fill="none" stroke="#39d98a" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <span className="factors-toggle-chevron">{expanded ? "⌃" : "⌄"}</span>
-        </span>
+        <span className="factors-toggle-chevron" aria-hidden="true">{expanded ? "⌃" : "⌄"}</span>
       </button>
 
       {expanded && (
@@ -214,7 +214,7 @@ function EnvironmentalFactors({ environment, slope }) {
           <div className="factor-group">
             <h3>Environmental factors</h3>
             <div className="factor-pill-row">
-              <FactorPill label="Antecedent rainfall" value={`${environment.rainfall_3d_mm} mm / 3d`} />
+              <FactorPill label="Antecedent rainfall" value={`${environment.rainfall_3d_mm} mm / 3d`} icon="≋" />
               {environmentalFactors.map((factor) => <FactorPill key={factor.label} {...factor} />)}
             </div>
           </div>
@@ -223,7 +223,7 @@ function EnvironmentalFactors({ environment, slope }) {
             <h3>Terrain &amp; hydrological factors</h3>
             <div className="factor-pill-row">
               {terrainFactors.map((factor) => <FactorPill key={factor.label} {...factor} />)}
-              <FactorPill label="Satellite / remote sensing" value="Vegetation · ground movement" />
+              <FactorPill label="Satellite / remote sensing" value="Vegetation · ground movement" icon="◌" />
             </div>
           </div>
 
