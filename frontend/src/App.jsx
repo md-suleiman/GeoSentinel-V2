@@ -200,7 +200,13 @@ function EnvironmentalFactors({ environment, slope }) {
           <strong>Multi-Factor Risk Analysis</strong>
           <small>Additional factors considered in the GeoSentinel assessment</small>
         </span>
-        <span className="factors-toggle-chevron" aria-hidden="true">{expanded ? "⌃" : "⌄"}</span>
+        <span className="factors-toggle-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 52">
+            <path d="M4 48 25 8l10 18 9-14 16 36" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="m37 39 6 6 14-17" fill="none" stroke="#39d98a" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="factors-toggle-chevron">{expanded ? "⌃" : "⌄"}</span>
+        </span>
       </button>
 
       {expanded && (
