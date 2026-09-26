@@ -2601,11 +2601,11 @@ button:disabled {
 
 /* Give the desktop sidebar enough room for all metric content. */
 .dashboard {
-  grid-template-columns: minmax(0, 1fr) 480px !important;
+  grid-template-columns: minmax(0, 1fr) 500px !important;
 }
 
 .sidebar {
-  width: 480px !important;
+  width: 500px !important;
   box-sizing: border-box;
   padding: 18px !important;
 }
@@ -2625,7 +2625,7 @@ button:disabled {
   justify-content: center !important;
   text-align: center;
   gap: 8px !important;
-  padding: 12px 8px !important;
+  padding: 13px 10px !important;
 }
 
 .environment-card .metric-icon {
@@ -4126,9 +4126,10 @@ button:disabled {
   min-width: 0;
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
-  grid-template-rows: auto auto;
+  grid-template-rows: minmax(32px, 1fr) auto;
   column-gap: 8px;
   align-content: center;
+  align-items: start;
   min-height: 70px;
   padding: 11px 13px;
   border: 1px solid #dbe4ec;
@@ -4156,6 +4157,7 @@ button:disabled {
   font-size: 11px;
   font-weight: 700;
   line-height: 1.35;
+  min-height: 30px;
 }
 
 .factor-pill strong {
