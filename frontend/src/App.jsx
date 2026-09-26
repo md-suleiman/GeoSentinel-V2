@@ -1718,8 +1718,8 @@ function App() {
           flex: 1 1 auto !important;
           min-height: 0 !important;
           height: calc(100vh - 76px) !important;
-          grid-template-columns: minmax(0, 1fr) 470px !important;
           gap: 0 !important;
+          position: relative !important;
         }
 
         .map-section {
@@ -1745,12 +1745,57 @@ function App() {
           padding: 18px !important;
         }
 
-        @media (max-width: 900px) {
+        @media (min-width: 1101px) {
+          .dashboard {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1fr) 490px !important;
+          }
+
+          .sidebar {
+            position: relative !important;
+            left: auto !important;
+            transform: none !important;
+            width: 490px !important;
+          }
+        }
+
+        @media (min-width: 801px) and (max-width: 1100px) {
+          .dashboard {
+            display: block !important;
+            overflow: hidden !important;
+          }
+
+          .map-section {
+            width: 100% !important;
+            height: 100% !important;
+          }
+
+          .sidebar {
+            position: absolute !important;
+            top: 0 !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            width: 490px !important;
+            max-width: calc(100% - 24px) !important;
+            height: 100% !important;
+          }
+        }
+
+        @media (max-width: 800px) {
           body { overflow: auto; }
           .app { height: auto !important; min-height: 100vh !important; overflow: visible !important; }
           .dashboard { height: auto !important; display: block !important; }
           .map-section { height: 55vh !important; min-height: 420px !important; }
-          .sidebar { height: auto !important; overflow: visible !important; }
+          .sidebar {
+            position: relative !important;
+            top: auto !important;
+            left: auto !important;
+            transform: none !important;
+            width: 100% !important;
+            max-width: none !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
         }
       `}</style>
 
