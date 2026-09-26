@@ -55,6 +55,57 @@ function MapFocusHandler({ location }) {
 
 
 /* -------------------------------- */
+/* Recent-Analysis high-risk markers (recentAnalyses source) */
+/* -------------------------------- */
+
+function HighRiskAnalysisMarkers({ analyses, enabled }) {
+  if (!enabled) return null;
+
+  return (
+    <>
+      {(analyses || [])
+        .filter((analysis) => {
+          const riskScore = Number(analysis?.result?.risk_score);
+          return (
+            Number.isFinite(riskScore) &&
+            riskScore >= 70 &&
+            Number.isFinite(Number(analysis.latitude)) &&
+            Number.isFinite(Number(analysis.longitude))
+          );
+        })
+        .map((analysis, index) => {
+          const riskScore = Number(analysis.result.risk_score);
+          const latitude = Number(analysis.latitude);
+          const longitude = Number(analysis.longitude);
+          return (
+            <CircleMarker
+              key={`recent-hr-${analysis.id || `${latitude}-${longitude}-${index}`}`}
+              center={[latitude, longitude]}
+              radius={8}
+              pathOptions={{
+                color: "transparent",
+                fillColor: getRiskMarkerColor("High"),
+                fillOpacity: 1,
+                weight: 0,
+              }}
+              eventHandlers={{
+                mouseover: (event) => event.target.openPopup(),
+                mouseout: (event) => event.target.closePopup(),
+              }}
+            >
+              <Popup>
+                <strong>High Risk</strong>
+                <br />
+                Risk Score: {riskScore}/100
+              </Popup>
+            </CircleMarker>
+          );
+        })}
+    </>
+  );
+}
+
+/* -------------------------------- */
 /* NER State boundary boxes (approximate bounding polygons) */
 /* -------------------------------- */
 
@@ -1202,7 +1253,10 @@ function App() {
     useState([]);
   const [showHistoricalLandslides, setShowHistoricalLandslides] = useState(false);
 
-  // ---- High-Risk Area Scan state (independent of recentAnalyses) ----
+  // ---- Recent Analysis high-risk layer (recentAnalyses source) ----
+  const [showRecentHighRisk, setShowRecentHighRisk] = useState(false);
+
+  // ---- Heatmap: NER state-wide scan (independent of recentAnalyses) ----
   const [showHighRiskHeatmap, setShowHighRiskHeatmap] = useState(false);
   const [stateScanModalOpen, setStateScanModalOpen] = useState(false);
   const [scanStatus, setScanStatus] = useState("idle"); // "idle" | "scanning" | "done"
@@ -2542,6 +2596,11 @@ function App() {
             />
 
             <MapFocusHandler location={mapFocusLocation} />
+            <HighRiskAnalysisMarkers
+              analyses={recentAnalyses}
+              enabled={showRecentHighRisk}
+            />
+
             <HighRiskScanMarkers
               scanResults={scanResults}
               enabled={showHighRiskHeatmap}
@@ -2741,7 +2800,17 @@ function App() {
               aria-pressed={showHistoricalLandslides}
               title="Toggle historical landslide locations"
             >
-              {showHistoricalLandslides ? "● History On" : "○ History"}
+              {showHistoricalLandslides ? "● Historical Data" : "○ Historical Data"}
+            </button>
+
+            <button
+              type="button"
+              className={`historical-toggle recent-high-risk-toggle ${showRecentHighRisk ? "active" : ""}`}
+              onClick={() => setShowRecentHighRisk((visible) => !visible)}
+              aria-pressed={showRecentHighRisk}
+              title="Show high-risk locations from recent analyses"
+            >
+              {showRecentHighRisk ? "● Recent Analysis" : "○ Recent Analysis"}
             </button>
 
             <button
@@ -2749,24 +2818,22 @@ function App() {
               className={`historical-toggle heatmap-toggle ${showHighRiskHeatmap ? "active" : ""}`}
               onClick={() => {
                 if (showHighRiskHeatmap) {
-                  // Turn off
                   setShowHighRiskHeatmap(false);
                   setScanZoomTarget(null);
                 } else {
-                  // Open the state-scan modal
                   setStateScanModalOpen(true);
                 }
               }}
               aria-pressed={showHighRiskHeatmap}
-              title="Scan a state for high-risk locations"
+              title="Scan a NER state for high-risk locations"
             >
               {showHighRiskHeatmap
-                ? `● High-Risk On (${scanResults.length})`
-                : "○ High-Risk Areas"}
+                ? `● Heatmap (${scanResults.length})`
+                : "○ Heatmap"}
             </button>
           </div>
 
-          {/* High-risk scan status badge */}
+          {/* Heatmap scan status badge */}
           {showHighRiskHeatmap && scanStateName && (
             <div className="scan-status-badge">
               {scanStatus === "scanning"
