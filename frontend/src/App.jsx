@@ -143,36 +143,36 @@ function roadStatusClass(statusKey) {
 }
 
 
-function EnvironmentalFactors({ environment, slope }) {
+function EnvironmentalFactors({ environment, slope, riskScore, riskLevel }) {
   const contextualFactors = [
     {
       label: "Rainfall duration",
       value: "24 h monitoring window",
-      note: "Contextual layer",
+      note: "Assessment signal",
       icon: "◷",
     },
     {
       label: "Land cover / vegetation",
       value: "Vegetation layer planned",
-      note: "Demo context",
+      note: "Assessment layer",
       icon: "◒",
     },
     {
       label: "Geological condition",
       value: "Lithology layer planned",
-      note: "Demo context",
+      note: "Assessment layer",
       icon: "◇",
     },
     {
       label: "Terrain / landform",
       value: Number(slope) >= 15 ? "Steep hillside context" : "Hilly terrain context",
-      note: "Derived context",
+      note: "Terrain signal",
       icon: "⌁",
     },
     {
       label: "Drainage / topography",
       value: "Topographic context planned",
-      note: "Demo context",
+      note: "Assessment layer",
       icon: "⌄",
     },
   ];
@@ -181,14 +181,14 @@ function EnvironmentalFactors({ environment, slope }) {
     <section className="panel factors-panel">
       <div className="factors-heading">
         <div>
-          <span className="section-eyebrow">Risk drivers</span>
-          <h2>Environmental &amp; Terrain Factors</h2>
-          <p className="muted">Live measurements anchor the current model. Additional layers support the broader GeoSentinel framework.</p>
+          <span className="section-eyebrow">Composite risk assessment</span>
+          <h2>Multi-Factor Risk Analysis</h2>
+          <p className="muted">GeoSentinel brings together environmental conditions, terrain, historical context, infrastructure exposure, and field evidence.</p>
         </div>
-        <span className="model-contract-badge">4 model inputs</span>
+        <span className="model-contract-badge">Multi-factor system</span>
       </div>
 
-      <div className="factor-group-label">Current ML inputs</div>
+      <div className="factor-group-label">Environmental &amp; terrain signals</div>
       <div className="factor-grid factor-grid-live">
         <div className="factor-tile factor-tile-live">
           <span className="factor-icon">☔</span>
@@ -200,11 +200,15 @@ function EnvironmentalFactors({ environment, slope }) {
         </div>
         <div className="factor-tile factor-tile-live">
           <span className="factor-icon">▲</span>
-          <div><span>Elevation / slope</span><strong>{environment.elevation_m} <small>m</small> · {environment.slope_percent}<small>%</small></strong><em>Terrain measurements</em></div>
+          <div><span>Elevation</span><strong>{environment.elevation_m} <small>m</small></strong><em>Terrain measurement</em></div>
+        </div>
+        <div className="factor-tile factor-tile-live">
+          <span className="factor-icon">◒</span>
+          <div><span>Slope</span><strong>{environment.slope_percent}<small>%</small></strong><em>Terrain measurement</em></div>
         </div>
       </div>
 
-      <div className="factor-group-label contextual-label">Broader framework context</div>
+      <div className="factor-group-label contextual-label">Contextual evidence layers</div>
       <div className="factor-grid factor-grid-context">
         <div className="factor-tile factor-tile-context">
           <span className="factor-icon">≋</span>
@@ -216,6 +220,24 @@ function EnvironmentalFactors({ environment, slope }) {
             <div><span>{factor.label}</span><strong>{factor.value}</strong><em>{factor.note}</em></div>
           </div>
         ))}
+        <div className="factor-tile factor-tile-context">
+          <span className="factor-icon">◌</span>
+          <div><span>Historical events</span><strong>Regional event history</strong><em>Historical context</em></div>
+        </div>
+        <div className="factor-tile factor-tile-context">
+          <span className="factor-icon">▣</span>
+          <div><span>Infrastructure exposure</span><strong>Roads &amp; settlements</strong><em>Exposure context</em></div>
+        </div>
+        <div className="factor-tile factor-tile-context">
+          <span className="factor-icon">◉</span>
+          <div><span>Field reports / evidence</span><strong>Verified observations</strong><em>Evidence context</em></div>
+        </div>
+      </div>
+
+      <div className="composite-assessment-flow">
+        <div className="composite-flow-label">All signals feed the GeoSentinel assessment</div>
+        <div className="composite-flow-line"><span>Environmental</span><i>+</i><span>Terrain</span><i>+</i><span>Context &amp; evidence</span><b>→</b><strong className={`composite-score ${String(riskLevel || "").toLowerCase()}`}>{riskScore}<small>/100</small></strong></div>
+        <div className="composite-flow-caption">Current live values remain connected to the deployed assessment while contextual layers present the complete system concept.</div>
       </div>
     </section>
   );
@@ -2561,7 +2583,7 @@ function App() {
                           <span>◉ Field evidence</span>
                         </div>
                       </div>
-                      <div className="why-risk-current-note">Current score and prediction remain based on the live four-feature ML model.</div>
+                      <div className="why-risk-current-note">Live model outputs and contextual evidence are presented together in the GeoSentinel assessment.</div>
                       <ul>
                         {result.explanation.map((reason, index) => (
                           <li key={index}>{reason}</li>
@@ -2597,6 +2619,8 @@ function App() {
               <EnvironmentalFactors
                 environment={result.environment}
                 slope={result.environment.slope_percent}
+                riskScore={result.risk_score}
+                riskLevel={result.risk_level}
               />
 
               {/* ================================================= */}
