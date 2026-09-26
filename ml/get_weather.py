@@ -2,6 +2,7 @@ import pandas as pd
 import requests
 from pathlib import Path
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 INPUT_FILE = Path("data/landslides_ner_features.csv")
 OUTPUT_FILE = Path("data/landslides_ner_weather.csv")
@@ -9,31 +10,71 @@ OUTPUT_FILE = Path("data/landslides_ner_weather.csv")
 URL = "https://archive-api.open-meteo.com/v1/archive"
 
 
-def get_weather(latitude, longitude, date):
-    response = requests.get(
-        URL,
-        params={
-            "latitude": latitude,
-            "longitude": longitude,
-            "start_date": date,
-            "end_date": date,
-            "daily": "precipitation_sum,soil_moisture_0_to_10cm_mean",
-            "timezone": "UTC",
-        },
-        timeout=30,
+def get_weather(latitude, longitude, event_date):
+    event_timestamp = pd.Timestamp(event_date)
+    event_date_string = event_timestamp.strftime("%Y-%m-%d")
+    start_date = (event_timestamp.normalize() - pd.Timedelta(days=1)).strftime(
+        "%Y-%m-%d"
     )
 
-    response.raise_for_status()
+    for attempt in range(3):
+        try:
+            response = requests.get(
+                URL,
+                params={
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "start_date": start_date,
+                    "end_date": event_date_string,
+                    "hourly": "precipitation,soil_moisture_0_to_7cm",
+                    "timezone": "auto",
+                },
+                timeout=15,
+            )
+            response.raise_for_status()
+            break
+        except requests.RequestException:
+            if attempt == 2:
+                raise
+            time.sleep(1)
 
     data = response.json()
 
-    daily = data.get("daily")
+    hourly = data.get("hourly")
 
-    if not daily:
+    if not hourly:
         return None, None
 
-    rainfall = daily["precipitation_sum"][0]
-    soil_moisture = daily["soil_moisture_0_to_10cm_mean"][0]
+    hourly_times = pd.to_datetime(hourly.get("time", []), errors="coerce")
+    precipitation_values = hourly.get("precipitation", [])
+    soil_values = hourly.get("soil_moisture_0_to_7cm", [])
+
+    event_hour = event_timestamp.floor("h")
+    rainfall_values = [
+        float(value)
+        for timestamp, value in zip(hourly_times, precipitation_values)
+        if (
+            not pd.isna(timestamp)
+            and event_hour - pd.Timedelta(hours=24) < timestamp <= event_hour
+            and value is not None
+        )
+    ]
+    rainfall = round(sum(rainfall_values), 1) if rainfall_values else None
+
+    daily_soil_values = [
+        float(value)
+        for timestamp, value in zip(hourly_times, soil_values)
+        if (
+            not pd.isna(timestamp)
+            and timestamp.date() == event_timestamp.date()
+            and value is not None
+        )
+    ]
+    soil_moisture = (
+        round(sum(daily_soil_values) / len(daily_soil_values), 6)
+        if daily_soil_values
+        else None
+    )
 
     return rainfall, soil_moisture
 
@@ -46,38 +87,29 @@ def main():
         errors="coerce"
     )
 
-    rainfall_values = []
-    soil_values = []
-
-    for index, row in df.iterrows():
-
+    def fetch_row(row):
         date = row["event_date"]
 
         if pd.isna(date):
-            rainfall_values.append(None)
-            soil_values.append(None)
-            continue
-
-        date_string = date.strftime("%Y-%m-%d")
+            return None, None
 
         try:
-            rainfall, soil_moisture = get_weather(
+            return get_weather(
                 row["latitude"],
                 row["longitude"],
-                date_string,
+                date,
             )
-
-            rainfall_values.append(rainfall)
-            soil_values.append(soil_moisture)
-
         except Exception as error:
-            print(f"Failed row {index}: {error}")
-            rainfall_values.append(None)
-            soil_values.append(None)
+            print(f"Failed row: {error}")
+            return None, None
 
-        print(f"Processed {index + 1}/{len(df)}")
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        weather_values = list(
+            executor.map(fetch_row, [row for _, row in df.iterrows()])
+        )
 
-        time.sleep(0.2)
+    rainfall_values = [rainfall for rainfall, _ in weather_values]
+    soil_values = [soil_moisture for _, soil_moisture in weather_values]
 
     df["rainfall_mm"] = rainfall_values
     df["soil_moisture"] = soil_values

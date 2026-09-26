@@ -10,6 +10,8 @@ import os
 import requests
 import joblib
 import time
+import pandas as pd
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 from numbers import Integral
 
@@ -104,6 +106,24 @@ app.add_middleware(
 MODEL_PATH = "../ml/models/landslide_model.joblib"
 
 model = joblib.load(MODEL_PATH)
+MODEL_FEATURES = [
+    "rainfall_mm",
+    "soil_moisture",
+    "elevation_m",
+    "slope_percent",
+]
+
+loaded_model_features = list(getattr(model, "feature_names_in_", []))
+if (
+    getattr(model, "n_features_in_", None) != len(MODEL_FEATURES)
+    or (
+        loaded_model_features
+        and loaded_model_features != MODEL_FEATURES
+    )
+):
+    raise RuntimeError(
+        "Loaded landslide model does not match the backend feature contract."
+    )
 
 
 # ---------------------------------------------------------
@@ -356,33 +376,45 @@ def get_rainfall(
         )
 
     try:
+        fallback_end_date = datetime.now(timezone.utc).date() - timedelta(days=1)
+        fallback_start_date = fallback_end_date - timedelta(days=7)
+
         response = requests.get(
             "https://archive-api.open-meteo.com/v1/archive",
             params={
                 "latitude": latitude,
                 "longitude": longitude,
-                "start_date": "2025-01-01",
-                "end_date": "2025-12-31",
-                "daily": "precipitation_sum",
-                "timezone": "auto",
+                "start_date": fallback_start_date.isoformat(),
+                "end_date": fallback_end_date.isoformat(),
+                "hourly": "precipitation",
+                "timezone": "UTC",
             },
             timeout=10,
         )
         response.raise_for_status()
 
-        rainfall_values = response.json().get("daily", {}).get("precipitation_sum", [])
+        hourly = response.json().get("hourly", {})
         rainfall_values = [
-            float(value) for value in rainfall_values if value is not None
+            0.0 if value is None else float(value)
+            for value in hourly.get("precipitation", [])
         ]
-        fallback_rainfall = round(max(rainfall_values), 1) if rainfall_values else 0.0
+        latest_values = rainfall_values[-168:]
+        if not latest_values:
+            raise ValueError("Rainfall fallback contained no hourly values")
+
+        fallback_rainfall = round(sum(latest_values[-24:]), 1)
+        fallback_current = round(latest_values[-1], 1)
+        fallback_3d = round(sum(latest_values[-72:]), 1)
+        fallback_7d = round(sum(latest_values), 1)
+        fallback_intensity = round(max(latest_values[-24:]), 1)
 
         return {
             "rainfall_mm": fallback_rainfall,
-            "rainfall_current_mm": 0.0,
+            "rainfall_current_mm": fallback_current,
             "rainfall_24h_mm": fallback_rainfall,
-            "rainfall_3d_mm": fallback_rainfall,
-            "rainfall_7d_mm": fallback_rainfall,
-            "rainfall_intensity_mm_h": fallback_rainfall,
+            "rainfall_3d_mm": fallback_3d,
+            "rainfall_7d_mm": fallback_7d,
+            "rainfall_intensity_mm_h": fallback_intensity,
             "rainfall_source": "open-meteo-archive-fallback",
         }
 
@@ -396,6 +428,63 @@ def get_rainfall(
             "rainfall_7d_mm": 0.0,
             "rainfall_intensity_mm_h": 0.0,
             "rainfall_source": "unavailable",
+        }
+
+
+# ---------------------------------------------------------
+# SOIL MOISTURE
+# ---------------------------------------------------------
+
+def get_soil_moisture(
+    latitude,
+    longitude,
+):
+
+    try:
+
+        latest_date = datetime.now(timezone.utc).date()
+        start_date = latest_date - timedelta(days=2)
+
+        response = requests.get(
+            "https://archive-api.open-meteo.com/v1/archive",
+            params={
+                "latitude": latitude,
+                "longitude": longitude,
+                "start_date": start_date.isoformat(),
+                "end_date": latest_date.isoformat(),
+                "hourly": "soil_moisture_0_to_7cm",
+                "timezone": "UTC",
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+
+        hourly = response.json().get("hourly", {})
+        hourly_times = hourly.get("time", [])
+        hourly_values = hourly.get("soil_moisture_0_to_7cm", [])
+        values_by_date = {}
+
+        for timestamp, value in zip(hourly_times, hourly_values):
+            if value is None:
+                continue
+            date_string = timestamp.split("T", 1)[0]
+            values_by_date.setdefault(date_string, []).append(float(value))
+
+        available_dates = sorted(values_by_date)
+        if not available_dates:
+            raise ValueError("Soil moisture response contained no hourly values")
+
+        values = values_by_date[available_dates[-1]]
+        return {
+            "soil_moisture": round(sum(values) / len(values), 6),
+            "soil_moisture_source": "open-meteo-archive-hourly-0-to-7cm",
+        }
+
+    except Exception as error:
+        print("Soil moisture error:", error)
+        return {
+            "soil_moisture": None,
+            "soil_moisture_source": "unavailable",
         }
 
 
@@ -478,15 +567,22 @@ def get_environment(
 
     # These are independent network calls, so run them concurrently.
     # Terrain also combines elevation + slope into a single API request.
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         rainfall_future = executor.submit(get_rainfall, latitude, longitude)
+        soil_moisture_future = executor.submit(
+            get_soil_moisture,
+            latitude,
+            longitude,
+        )
         terrain_future = executor.submit(get_terrain_features, latitude, longitude)
         rainfall = rainfall_future.result()
+        soil_moisture = soil_moisture_future.result()
         elevation, slope = terrain_future.result()
 
     environment = {
         "rainfall": rainfall["rainfall_mm"],
         **rainfall,
+        **soil_moisture,
         "elevation": elevation,
         "slope": slope,
     }
@@ -752,32 +848,41 @@ def assess_infrastructure(
 
 def calculate_risk(
     rainfall,
+    soil_moisture,
     elevation,
     slope,
 ):
 
     features = [[
         rainfall,
+        soil_moisture,
         elevation,
         slope,
     ]]
 
-    try:
+    prediction = None
 
-        prediction = int(
-            model.predict(
-                features
-            )[0]
-        )
+    if soil_moisture is not None:
+        try:
 
-    except Exception as error:
+            prediction = int(
+                model.predict(
+                    pd.DataFrame(
+                        features,
+                        columns=MODEL_FEATURES,
+                    )
+                )[0]
+            )
 
-        print(
-            "ML prediction error:",
-            error,
-        )
+        except Exception as error:
 
-        prediction = 0
+            print(
+                "ML prediction error:",
+                error,
+            )
+
+    else:
+        print("ML prediction unavailable: soil moisture was not retrieved.")
 
     slope_score = (
         min(
@@ -803,7 +908,7 @@ def calculate_risk(
         * 10
     )
 
-    ml_score = prediction * 15
+    ml_score = (prediction or 0) * 15
 
     total_score = (
         slope_score
@@ -882,6 +987,12 @@ def calculate_risk(
             "The machine-learning model classified these environmental conditions as potentially landslide-prone."
         )
 
+    elif prediction is None:
+
+        explanation.append(
+            "The machine-learning prediction was unavailable because soil moisture could not be retrieved."
+        )
+
     else:
 
         explanation.append(
@@ -936,6 +1047,10 @@ def predict(
         "slope"
     ]
 
+    soil_moisture = environment[
+        "soil_moisture"
+    ]
+
     (
         risk_level,
         risk_score,
@@ -943,6 +1058,7 @@ def predict(
         explanation,
     ) = calculate_risk(
         rainfall,
+        soil_moisture,
         elevation,
         slope,
     )
@@ -988,6 +1104,12 @@ def predict(
 
             "rainfall_source":
                 environment["rainfall_source"],
+
+            "soil_moisture":
+                soil_moisture,
+
+            "soil_moisture_source":
+                environment["soil_moisture_source"],
 
             "elevation_m":
                 round(
