@@ -54,51 +54,335 @@ function MapFocusHandler({ location }) {
 }
 
 
-function HighRiskAnalysisMarkers({ analyses, enabled }) {
-  if (!enabled) return null;
+/* -------------------------------- */
+/* NER State boundary boxes (approximate bounding polygons) */
+/* -------------------------------- */
+
+const NER_STATES = [
+  {
+    name: "Arunachal Pradesh",
+    // Approximate polygon vertices (lat/lon)
+    polygon: [
+      [26.65, 91.60], [27.20, 92.10], [27.80, 92.80], [28.40, 93.80],
+      [28.70, 95.00], [29.00, 96.50], [29.20, 97.40], [28.90, 97.50],
+      [28.00, 97.80], [27.50, 97.40], [26.90, 96.50], [26.40, 95.50],
+      [26.10, 94.50], [26.00, 93.00], [26.20, 92.00], [26.65, 91.60],
+    ],
+    center: [27.5, 94.7],
+    zoom: 7,
+  },
+  {
+    name: "Assam",
+    polygon: [
+      [24.10, 89.80], [24.50, 90.40], [25.00, 91.50], [25.80, 92.50],
+      [26.30, 93.80], [27.00, 94.70], [27.50, 95.60], [27.10, 95.80],
+      [26.50, 95.20], [25.80, 94.20], [25.20, 93.00], [24.80, 91.80],
+      [24.30, 90.70], [24.10, 89.80],
+    ],
+    center: [26.2, 92.9],
+    zoom: 8,
+  },
+  {
+    name: "Manipur",
+    polygon: [
+      [23.84, 93.00], [24.20, 93.10], [24.60, 93.50], [25.00, 93.90],
+      [25.20, 94.40], [24.90, 94.80], [24.50, 94.70], [24.00, 94.50],
+      [23.70, 94.20], [23.50, 93.80], [23.40, 93.30], [23.84, 93.00],
+    ],
+    center: [24.65, 93.9],
+    zoom: 9,
+  },
+  {
+    name: "Meghalaya",
+    polygon: [
+      [25.00, 89.90], [25.30, 90.50], [25.50, 91.20], [25.70, 92.10],
+      [25.90, 92.80], [25.80, 93.30], [25.50, 93.00], [25.10, 92.40],
+      [24.80, 91.50], [24.60, 90.60], [24.80, 89.90], [25.00, 89.90],
+    ],
+    center: [25.46, 91.36],
+    zoom: 9,
+  },
+  {
+    name: "Mizoram",
+    polygon: [
+      [21.90, 92.25], [22.30, 92.30], [22.70, 92.50], [23.20, 92.80],
+      [23.80, 93.00], [24.00, 92.90], [23.80, 92.60], [23.30, 92.30],
+      [22.90, 92.00], [22.50, 92.00], [21.90, 92.25],
+    ],
+    center: [23.16, 92.94],
+    zoom: 9,
+  },
+  {
+    name: "Nagaland",
+    polygon: [
+      [25.10, 93.30], [25.50, 93.50], [25.90, 94.00], [26.30, 94.60],
+      [26.50, 95.20], [26.00, 95.40], [25.60, 95.10], [25.20, 94.60],
+      [24.80, 94.00], [24.70, 93.50], [25.10, 93.30],
+    ],
+    center: [25.67, 94.11],
+    zoom: 9,
+  },
+  {
+    name: "Sikkim",
+    polygon: [
+      [27.10, 88.00], [27.50, 88.20], [27.90, 88.50], [28.10, 88.90],
+      [28.00, 89.00], [27.70, 88.90], [27.30, 88.70], [27.00, 88.40],
+      [26.90, 88.10], [27.10, 88.00],
+    ],
+    center: [27.53, 88.51],
+    zoom: 10,
+  },
+  {
+    name: "Tripura",
+    polygon: [
+      [22.90, 91.10], [23.50, 91.20], [24.00, 91.50], [24.30, 92.00],
+      [24.00, 92.40], [23.50, 92.30], [23.00, 92.00], [22.80, 91.60],
+      [22.70, 91.20], [22.90, 91.10],
+    ],
+    center: [23.75, 91.75],
+    zoom: 9,
+  },
+];
+
+/* Point-in-polygon (ray-casting) for scan grid filtering */
+function pointInPolygon(lat, lon, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [yi, xi] = polygon[i];
+    const [yj, xj] = polygon[j];
+    const intersect =
+      yi > lat !== yj > lat &&
+      lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/* Generate a grid of lat/lon points inside a polygon */
+function generateStateGrid(polygon, targetCount = 150) {
+  const lats = polygon.map(([lat]) => lat);
+  const lons = polygon.map(([, lon]) => lon);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons);
+  const maxLon = Math.max(...lons);
+
+  const latSpan = maxLat - minLat;
+  const lonSpan = maxLon - minLon;
+
+  // Estimate a step so we roughly hit targetCount inside points.
+  // Area ≈ latSpan * lonSpan. Points in box ≈ targetCount * 1.7 (polygon is ~60% of box).
+  const totalBoxPoints = targetCount * 1.7;
+  const steps = Math.ceil(Math.sqrt(totalBoxPoints));
+  const latStep = latSpan / steps;
+  const lonStep = lonSpan / steps;
+
+  const points = [];
+  for (let la = minLat + latStep / 2; la < maxLat; la += latStep) {
+    for (let lo = minLon + lonStep / 2; lo < maxLon; lo += lonStep) {
+      if (pointInPolygon(la, lo, polygon)) {
+        points.push([parseFloat(la.toFixed(4)), parseFloat(lo.toFixed(4))]);
+      }
+    }
+  }
+  return points;
+}
+
+/* -------------------------------- */
+/* High-risk scan results markers */
+/* -------------------------------- */
+
+function HighRiskScanMarkers({ scanResults, enabled }) {
+  if (!enabled || !scanResults || scanResults.length === 0) return null;
 
   return (
     <>
-      {(analyses || [])
-        .filter((analysis) => {
-          const riskScore = Number(analysis?.result?.risk_score);
-          return (
-            Number.isFinite(riskScore) &&
-            riskScore >= 70 &&
-            Number.isFinite(Number(analysis.latitude)) &&
-            Number.isFinite(Number(analysis.longitude))
-          );
-        })
-        .map((analysis, index) => {
-          const riskScore = Number(analysis.result.risk_score);
-          const latitude = Number(analysis.latitude);
-          const longitude = Number(analysis.longitude);
-
-          return (
-            <CircleMarker
-              key={`high-risk-analysis-${analysis.id || `${latitude}-${longitude}-${index}`}`}
-              center={[latitude, longitude]}
-              radius={8}
-              pathOptions={{
-                color: "transparent",
-                fillColor: getRiskMarkerColor("High"),
-                fillOpacity: 1,
-                weight: 0,
-              }}
-              eventHandlers={{
-                mouseover: (event) => event.target.openPopup(),
-                mouseout: (event) => event.target.closePopup(),
-              }}
-            >
-              <Popup>
-                <strong>High Risk</strong>
-                <br />
-                Risk Score: {riskScore}/100
-              </Popup>
-            </CircleMarker>
-          );
-        })}
+      {scanResults.map((point, index) => (
+        <CircleMarker
+          key={`hr-scan-${index}-${point.lat}-${point.lon}`}
+          center={[point.lat, point.lon]}
+          radius={8}
+          pathOptions={{
+            color: "transparent",
+            fillColor: getRiskMarkerColor("High"),
+            fillOpacity: 1,
+            weight: 0,
+          }}
+          eventHandlers={{
+            mouseover: (event) => event.target.openPopup(),
+            mouseout: (event) => event.target.closePopup(),
+          }}
+        >
+          <Popup>
+            <strong>High Risk</strong>
+            <br />
+            Risk Score: {point.score}/100
+          </Popup>
+        </CircleMarker>
+      ))}
     </>
+  );
+}
+
+/* -------------------------------- */
+/* Map zoom-to-state handler */
+/* -------------------------------- */
+
+function MapZoomToState({ target }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!target) return;
+    const lats = target.polygon.map(([lat]) => lat);
+    const lons = target.polygon.map(([, lon]) => lon);
+    const bounds = [
+      [Math.min(...lats), Math.min(...lons)],
+      [Math.max(...lats), Math.max(...lons)],
+    ];
+    map.flyToBounds(bounds, { padding: [30, 30], duration: 1.2 });
+  }, [target, map]);
+  return null;
+}
+
+/* -------------------------------- */
+/* State scan modal */
+/* -------------------------------- */
+
+function StateScanModal({
+  onClose,
+  onScan,
+  scanStatus,
+  scanProgress,
+  scanTotal,
+  scanStateName,
+  resultCount,
+}) {
+  const [selectedState, setSelectedState] = useState("");
+
+  const isScanning = scanStatus === "scanning";
+  const isDone = scanStatus === "done";
+
+  function handleScan() {
+    if (!selectedState) return;
+    const stateObj = NER_STATES.find((s) => s.name === selectedState);
+    if (stateObj) onScan(stateObj);
+  }
+
+  return (
+    <div
+      className="menu-overlay"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !isScanning) onClose();
+      }}
+    >
+      <div className="menu-modal state-scan-modal">
+        <div className="menu-modal-header">
+          <div>
+            <h2>High-Risk Area Scan</h2>
+            <p>Select a state to scan for high-risk locations using the GeoSentinel AI model.</p>
+          </div>
+          {!isScanning && (
+            <button type="button" className="menu-modal-close" onClick={onClose}>
+              ×
+            </button>
+          )}
+        </div>
+
+        <div className="state-scan-body">
+          {!isScanning && !isDone && (
+            <>
+              <div className="state-scan-label">Select a NER state</div>
+              <div className="state-scan-grid">
+                {NER_STATES.map((state) => (
+                  <button
+                    key={state.name}
+                    type="button"
+                    className={`state-scan-option ${
+                      selectedState === state.name ? "selected" : ""
+                    }`}
+                    onClick={() => setSelectedState(state.name)}
+                  >
+                    {state.name}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                className="state-scan-submit"
+                disabled={!selectedState}
+                onClick={handleScan}
+              >
+                🔍 Scan {selectedState || "State"}
+              </button>
+            </>
+          )}
+
+          {isScanning && (
+            <div className="state-scan-progress">
+              <div className="state-scan-spinner" />
+              <div className="state-scan-progress-text">
+                Scanning {scanStateName}...
+              </div>
+              <div className="state-scan-progress-sub">
+                {scanProgress} / {scanTotal} locations
+              </div>
+              <div className="state-scan-bar-track">
+                <div
+                  className="state-scan-bar-fill"
+                  style={{
+                    width: scanTotal > 0 ? `${(scanProgress / scanTotal) * 100}%` : "0%",
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {isDone && (
+            <>
+              <div className="state-scan-done">
+                <div className="state-scan-done-icon">✓</div>
+                <div className="state-scan-done-text">
+                  {resultCount} high-risk location{resultCount !== 1 ? "s" : ""} found in{" "}
+                  {scanStateName}
+                </div>
+              </div>
+              <div className="state-scan-label" style={{ marginTop: 20 }}>
+                Scan another state
+              </div>
+              <div className="state-scan-grid">
+                {NER_STATES.map((state) => (
+                  <button
+                    key={state.name}
+                    type="button"
+                    className={`state-scan-option ${
+                      selectedState === state.name ? "selected" : ""
+                    }`}
+                    onClick={() => setSelectedState(state.name)}
+                  >
+                    {state.name}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="state-scan-submit"
+                disabled={!selectedState}
+                onClick={handleScan}
+              >
+                🔍 Scan {selectedState || "State"}
+              </button>
+              <button
+                type="button"
+                className="state-scan-close-btn"
+                onClick={onClose}
+              >
+                Close &amp; View on Map
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -917,7 +1201,18 @@ function App() {
   const [historicalLandslides, setHistoricalLandslides] =
     useState([]);
   const [showHistoricalLandslides, setShowHistoricalLandslides] = useState(false);
+
+  // ---- High-Risk Area Scan state (independent of recentAnalyses) ----
   const [showHighRiskHeatmap, setShowHighRiskHeatmap] = useState(false);
+  const [stateScanModalOpen, setStateScanModalOpen] = useState(false);
+  const [scanStatus, setScanStatus] = useState("idle"); // "idle" | "scanning" | "done"
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scanTotal, setScanTotal] = useState(0);
+  const [scanStateName, setScanStateName] = useState("");
+  const [scanResults, setScanResults] = useState([]); // [{lat, lon, score}]
+  const [scanZoomTarget, setScanZoomTarget] = useState(null);
+  // Session-level cache: Map<stateName, [{lat,lon,score}]>
+  const stateScanCacheRef = useRef(new Map());
 
   const [recentAnalyses, setRecentAnalyses] = useState(() => {
     try {
@@ -1289,6 +1584,79 @@ function App() {
 
   }, []);
 
+
+  /* -------------------------------- */
+  /* High-Risk Area State Scan */
+  /* -------------------------------- */
+
+  async function scanStateForHighRisk(stateObj) {
+    // Return cached results if this state was already scanned this session.
+    if (stateScanCacheRef.current.has(stateObj.name)) {
+      const cached = stateScanCacheRef.current.get(stateObj.name);
+      setScanStateName(stateObj.name);
+      setScanResults(cached);
+      setScanStatus("done");
+      setScanProgress(cached.length);
+      setScanTotal(cached.length);
+      setScanZoomTarget(stateObj);
+      setShowHighRiskHeatmap(true);
+      return;
+    }
+
+    // Clear previous scan results.
+    setScanResults([]);
+    setScanStateName(stateObj.name);
+    setScanStatus("scanning");
+    setScanProgress(0);
+
+    const grid = generateStateGrid(stateObj.polygon, 150);
+    setScanTotal(grid.length);
+
+    const BATCH_SIZE = 8;
+    const highRisk = [];
+    let done = 0;
+
+    for (let i = 0; i < grid.length; i += BATCH_SIZE) {
+      const batch = grid.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(([lat, lon]) =>
+          fetch("http://127.0.0.1:8000/predict", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ latitude: lat, longitude: lon }),
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+              if (!data) return null;
+              const score = Number(data.risk_score);
+              if (
+                Number.isFinite(score) &&
+                score >= 70 &&
+                data.risk_level !== "Not Applicable"
+              ) {
+                return { lat, lon, score };
+              }
+              return null;
+            })
+            .catch(() => null)
+        )
+      );
+
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value) {
+          highRisk.push(r.value);
+        }
+      }
+      done += batch.length;
+      setScanProgress(done);
+    }
+
+    stateScanCacheRef.current.set(stateObj.name, highRisk);
+    setScanResults(highRisk);
+    setScanStatus("done");
+    setScanZoomTarget(stateObj);
+    setShowHighRiskHeatmap(true);
+  }
 
   /* -------------------------------- */
   /* Analyze location */
@@ -2023,6 +2391,35 @@ function App() {
       )}
 
 
+      {stateScanModalOpen && (
+        <StateScanModal
+          onClose={() => {
+            if (scanStatus !== "scanning") setStateScanModalOpen(false);
+          }}
+          onScan={(stateObj) => {
+            // Clear old scan before starting a new one
+            if (stateScanCacheRef.current.has(stateObj.name)) {
+              // Use cached, close modal after
+              scanStateForHighRisk(stateObj).then(() => {
+                setStateScanModalOpen(false);
+              });
+            } else {
+              // Fresh scan — keep modal open for progress, then close
+              setScanResults([]);
+              setScanZoomTarget(null);
+              scanStateForHighRisk(stateObj).then(() => {
+                setStateScanModalOpen(false);
+              });
+            }
+          }}
+          scanStatus={scanStatus}
+          scanProgress={scanProgress}
+          scanTotal={scanTotal}
+          scanStateName={scanStateName}
+          resultCount={scanResults.length}
+        />
+      )}
+
       {reportMenuOpen && (
         <div
           className="menu-overlay"
@@ -2145,10 +2542,14 @@ function App() {
             />
 
             <MapFocusHandler location={mapFocusLocation} />
-            <HighRiskAnalysisMarkers
-              analyses={recentAnalyses}
+            <HighRiskScanMarkers
+              scanResults={scanResults}
               enabled={showHighRiskHeatmap}
             />
+
+            {scanZoomTarget && showHighRiskHeatmap && (
+              <MapZoomToState target={scanZoomTarget} />
+            )}
 
 
             {/* -------------------------------- */}
@@ -2346,13 +2747,35 @@ function App() {
             <button
               type="button"
               className={`historical-toggle heatmap-toggle ${showHighRiskHeatmap ? "active" : ""}`}
-              onClick={() => setShowHighRiskHeatmap((visible) => !visible)}
+              onClick={() => {
+                if (showHighRiskHeatmap) {
+                  // Turn off
+                  setShowHighRiskHeatmap(false);
+                  setScanZoomTarget(null);
+                } else {
+                  // Open the state-scan modal
+                  setStateScanModalOpen(true);
+                }
+              }}
               aria-pressed={showHighRiskHeatmap}
-              title="Toggle high-risk analysis heatmap"
+              title="Scan a state for high-risk locations"
             >
-              {showHighRiskHeatmap ? "● High-Risk Areas On" : "○ High-Risk Areas"}
+              {showHighRiskHeatmap
+                ? `● High-Risk On (${scanResults.length})`
+                : "○ High-Risk Areas"}
             </button>
           </div>
+
+          {/* High-risk scan status badge */}
+          {showHighRiskHeatmap && scanStateName && (
+            <div className="scan-status-badge">
+              {scanStatus === "scanning"
+                ? `Scanning ${scanStateName}… ${scanProgress}/${scanTotal}`
+                : `${scanResults.length} high-risk location${
+                    scanResults.length !== 1 ? "s" : ""
+                  } in ${scanStateName}`}
+            </div>
+          )}
 
           <div className="map-legend" aria-label="Map legend">
             <div className="map-legend-title">Map Legend</div>
@@ -2369,10 +2792,12 @@ function App() {
               <span className="map-legend-dot risk-high-dot" />
               <span>High risk</span>
             </div>
-            <div className="map-legend-item">
-              <span className="map-legend-dot high-risk-analysis-dot" />
-              <span>High-Risk Analysis</span>
-            </div>
+            {showHighRiskHeatmap && (
+              <div className="map-legend-item">
+                <span className="map-legend-dot high-risk-analysis-dot" />
+                <span>High-Risk Scan</span>
+              </div>
+            )}
             <div className="map-legend-divider" />
             <div className="map-legend-item">
               <span className="map-legend-dot historical-dot" />
