@@ -55,6 +55,98 @@ function MapFocusHandler({ location }) {
 
 
 /* -------------------------------- */
+/* Live-location navigation arrow  */
+/* -------------------------------- */
+
+function buildLiveArrowIcon(headingDeg) {
+  // headingDeg: 0 = north (up), 90 = east, clockwise.
+  // The SVG arrow points UP (north) by default; we rotate the whole icon.
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+      <!-- Accuracy halo -->
+      <circle cx="24" cy="24" r="20" fill="rgba(37,99,235,0.13)" />
+      <!-- White ring -->
+      <circle cx="24" cy="24" r="11" fill="white" />
+      <!-- Blue core -->
+      <circle cx="24" cy="24" r="8" fill="#2563eb" />
+      <!-- Navigation arrow (points up = north) -->
+      <polygon
+        points="24,4 31,20 24,16 17,20"
+        fill="#2563eb"
+        stroke="white"
+        stroke-width="1.5"
+        stroke-linejoin="round"
+      />
+    </svg>
+  `.trim();
+  return L.divIcon({
+    className: "live-location-icon-wrapper",
+    html: `<div class="live-location-icon" style="transform:rotate(${headingDeg}deg)">${svg}</div>`,
+    iconSize: [48, 48],
+    iconAnchor: [24, 24],
+  });
+}
+
+function LiveLocationMarker({ position, headingRef }) {
+  const markerRef = useRef(null);
+  const rafRef    = useRef(null);
+  const smoothRef = useRef(null); // current displayed heading
+
+  // Animate heading changes smoothly via rAF
+  useEffect(() => {
+    let running = true;
+
+    function tick() {
+      if (!running) return;
+      const marker = markerRef.current;
+      if (!marker) { rafRef.current = requestAnimationFrame(tick); return; }
+
+      const target  = headingRef.current ?? 0;
+      let   current = smoothRef.current  ?? target;
+
+      // Shortest angular distance
+      let delta = ((target - current + 540) % 360) - 180;
+
+      // Snap if very close (< 0.3°) to avoid permanent tiny drift
+      if (Math.abs(delta) < 0.3) {
+        current = target;
+      } else {
+        // Ease: move 12% of the remaining gap per frame (~60fps → smooth ~0.3s)
+        current = (current + delta * 0.12 + 360) % 360;
+      }
+
+      smoothRef.current = current;
+
+      // Update the icon rotation without a React re-render
+      const el = marker.getElement();
+      if (el) {
+        const inner = el.querySelector(".live-location-icon");
+        if (inner) inner.style.transform = `rotate(${current}deg)`;
+      }
+
+      rafRef.current = requestAnimationFrame(tick);
+    }
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      running = false;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [headingRef]);
+
+  if (!position) return null;
+
+  return (
+    <Marker
+      ref={markerRef}
+      position={[position.latitude, position.longitude]}
+      icon={buildLiveArrowIcon(smoothRef.current ?? headingRef.current ?? 0)}
+      zIndexOffset={1000}
+    />
+  );
+}
+
+/* -------------------------------- */
 /* Recent-Analysis high-risk markers (recentAnalyses source) */
 /* -------------------------------- */
 
@@ -1314,6 +1406,10 @@ function App() {
   const lastLiveAnalysisTimeRef = useRef(0);
   const liveAnalyzingRef = useRef(false);
 
+  // Live-location arrow: heading tracking
+  const liveHeadingRef            = useRef(0);   // target heading (degrees, 0=north)
+  const liveOrientationCleanupRef = useRef(null); // fn to remove orientation listener
+
   const [reports, setReports] = useState([]);
   const [reportType, setReportType] = useState("Landslide observed");
   const [reportDescription, setReportDescription] = useState("");
@@ -1892,12 +1988,20 @@ function App() {
       navigator.geolocation.clearWatch(liveWatchIdRef.current);
     }
 
+    // Remove DeviceOrientation listener if one was attached
+    if (liveOrientationCleanupRef.current) {
+      liveOrientationCleanupRef.current();
+      liveOrientationCleanupRef.current = null;
+    }
+
     liveWatchIdRef.current = null;
     lastLiveLocationRef.current = null;
     lastLiveAnalysisTimeRef.current = 0;
     liveAnalyzingRef.current = false;
+    liveHeadingRef.current = 0;
     setLiveAnalysisEnabled(false);
     setActiveThreatAlert(null);
+    setUserLocation(null);
   }
 
   function startLiveAnalysis() {
@@ -1914,12 +2018,80 @@ function App() {
     setLiveAnalysisEnabled(true);
     setActiveThreatAlert(null);
 
+    // ---- Device orientation (compass heading) ----
+    function attachOrientation() {
+      function onOrientation(event) {
+        // `absolute` events give true north; `deviceorientation` gives magnetic north.
+        // Both are fine for a visual indicator.
+        let heading = null;
+
+        if (event.webkitCompassHeading != null) {
+          // iOS Safari: already in 0-360 clockwise from north
+          heading = event.webkitCompassHeading;
+        } else if (event.alpha != null) {
+          // Standard: alpha = rotation around Z-axis, counter-clockwise from north.
+          // Convert to clockwise: heading = (360 - alpha) % 360
+          heading = (360 - event.alpha) % 360;
+        }
+
+        if (heading != null && Number.isFinite(heading)) {
+          liveHeadingRef.current = heading;
+        }
+      }
+
+      // Prefer absolute orientation (true north) when available
+      const eventName = typeof DeviceOrientationEvent !== "undefined" &&
+        typeof DeviceOrientationEvent.requestPermission === "function"
+          ? "deviceorientationabsolute"
+          : "deviceorientationabsolute";
+
+      window.addEventListener(eventName, onOrientation, { passive: true });
+      // Fallback: also listen on regular deviceorientation
+      window.addEventListener("deviceorientation", onOrientation, { passive: true });
+
+      return () => {
+        window.removeEventListener(eventName, onOrientation);
+        window.removeEventListener("deviceorientation", onOrientation);
+      };
+    }
+
+    // iOS 13+ requires explicit permission for DeviceOrientation
+    if (
+      typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function"
+    ) {
+      DeviceOrientationEvent.requestPermission()
+        .then((result) => {
+          if (result === "granted") {
+            liveOrientationCleanupRef.current = attachOrientation();
+          }
+        })
+        .catch(() => { /* permission denied — use GPS heading */ });
+    } else {
+      // Android / desktop: attach immediately
+      liveOrientationCleanupRef.current = attachOrientation();
+    }
+
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
         const now = Date.now();
         const previous = lastLiveLocationRef.current;
+
+        // Update arrow position immediately on every GPS callback
+        setUserLocation({ latitude: lat, longitude: lon });
+
+        // Use GPS heading as fallback when no orientation sensor fires
+        const gpsHeading = position.coords.heading;
+        if (
+          gpsHeading != null &&
+          Number.isFinite(gpsHeading) &&
+          position.coords.speed != null &&
+          position.coords.speed > 0.5 // only trust heading when moving
+        ) {
+          liveHeadingRef.current = gpsHeading;
+        }
 
         // GPS can emit many callbacks per second. Only analyze when the
         // user has moved meaningfully or enough time has passed.
@@ -1931,17 +2103,23 @@ function App() {
             lon
           );
 
+          // Only pan the map when the user has moved non-trivially
+          if (movedKm > 0.02) {
+            setMapFocusLocation({ latitude: lat, longitude: lon });
+          }
+
           if (movedKm < 0.1 && now - lastLiveAnalysisTimeRef.current < 15000) {
             return;
           }
+        } else {
+          // First fix: pan to the user
+          setMapFocusLocation({ latitude: lat, longitude: lon });
         }
 
         if (liveAnalyzingRef.current) return;
 
         lastLiveLocationRef.current = { latitude: lat, longitude: lon };
         lastLiveAnalysisTimeRef.current = now;
-        setUserLocation({ latitude: lat, longitude: lon });
-        setMapFocusLocation({ latitude: lat, longitude: lon });
         liveAnalyzingRef.current = true;
 
         analyzeLocation(lat, lon, {
@@ -2608,6 +2786,14 @@ function App() {
 
             {scanZoomTarget && showHighRiskHeatmap && (
               <MapZoomToState target={scanZoomTarget} />
+            )}
+
+            {/* Live-location navigation arrow */}
+            {liveAnalysisEnabled && userLocation && (
+              <LiveLocationMarker
+                position={userLocation}
+                headingRef={liveHeadingRef}
+              />
             )}
 
 
