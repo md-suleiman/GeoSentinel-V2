@@ -1313,9 +1313,35 @@ function App() {
     // This makes repeated clicks / Recent Analysis feel instant without changing
     // the prediction itself.
     const cacheKey = `${analyzedLat.toFixed(4)},${analyzedLon.toFixed(4)}`;
+    const addRecentAnalysis = (analysisResult) => {
+      if (analysisResult.risk_level === "Not Applicable") return;
+
+      setRecentAnalyses((previous) => {
+        const alreadyExists = previous.some(
+          (analysis) =>
+            Number(analysis.latitude) === analyzedLat &&
+            Number(analysis.longitude) === analyzedLon
+        );
+
+        if (alreadyExists) return previous;
+
+        return [
+          {
+            id: `${analyzedLat.toFixed(6)}-${analyzedLon.toFixed(6)}-${Date.now()}`,
+            latitude: analyzedLat,
+            longitude: analyzedLon,
+            result: analysisResult,
+            analyzedAt: new Date().toISOString(),
+          },
+          ...previous,
+        ].slice(0, 20);
+      });
+    };
+
     const cachedResult = analysisCacheRef.current.get(cacheKey);
     if (cachedResult) {
       setResult(cachedResult);
+      addRecentAnalysis(cachedResult);
       evaluateLocationWarnings(
         analyzedLat,
         analyzedLon,
@@ -1359,18 +1385,7 @@ function App() {
       }
       setResult(data);
 
-      if (data.risk_level !== "Not Applicable") {
-        setRecentAnalyses((previous) => [
-          {
-            id: `${analyzedLat.toFixed(6)}-${analyzedLon.toFixed(6)}-${Date.now()}`,
-            latitude: analyzedLat,
-            longitude: analyzedLon,
-            result: data,
-            analyzedAt: new Date().toISOString(),
-          },
-          ...previous,
-        ].slice(0, 20));
-      }
+      addRecentAnalysis(data);
 
       // Warnings are evaluated ONCE for this completed analysis.
       // This intentionally does not live inside a useEffect, preventing
