@@ -144,35 +144,38 @@ function roadStatusClass(statusKey) {
 
 
 function EnvironmentalFactors({ environment, slope, riskScore, riskLevel }) {
-  const contextualFactors = [
+  const environmentalFactors = [
     {
       label: "Rainfall duration",
       value: "24 h monitoring window",
-      note: "Assessment signal",
+      note: "Environmental factor",
       icon: "◷",
     },
     {
       label: "Land cover / vegetation",
       value: "Vegetation layer planned",
-      note: "Assessment layer",
+      note: "Environmental factor",
       icon: "◒",
     },
     {
       label: "Geological condition",
       value: "Lithology layer planned",
-      note: "Assessment layer",
+      note: "Environmental factor",
       icon: "◇",
     },
+  ];
+
+  const terrainFactors = [
     {
       label: "Terrain / landform",
       value: Number(slope) >= 15 ? "Steep hillside context" : "Hilly terrain context",
-      note: "Terrain signal",
+      note: "Terrain factor",
       icon: "⌁",
     },
     {
       label: "Drainage / topography",
       value: "Topographic context planned",
-      note: "Assessment layer",
+      note: "Hydrological factor",
       icon: "⌄",
     },
   ];
@@ -188,33 +191,23 @@ function EnvironmentalFactors({ environment, slope, riskScore, riskLevel }) {
         <span className="model-contract-badge">Multi-factor system</span>
       </div>
 
-      <div className="factor-group-label">Environmental &amp; terrain signals</div>
-      <div className="factor-grid factor-grid-live">
-        <div className="factor-tile factor-tile-live">
-          <span className="factor-icon">☔</span>
-          <div><span>Rainfall intensity</span><strong>{environment.rainfall_intensity_mm_h} <small>mm/h</small></strong><em>Live precipitation</em></div>
-        </div>
-        <div className="factor-tile factor-tile-live">
-          <span className="factor-icon">◉</span>
-          <div><span>Soil moisture</span><strong>{environment.soil_moisture ?? "—"}</strong><em>0–7 cm hourly mean</em></div>
-        </div>
-        <div className="factor-tile factor-tile-live">
-          <span className="factor-icon">▲</span>
-          <div><span>Elevation</span><strong>{environment.elevation_m} <small>m</small></strong><em>Terrain measurement</em></div>
-        </div>
-        <div className="factor-tile factor-tile-live">
-          <span className="factor-icon">◒</span>
-          <div><span>Slope</span><strong>{environment.slope_percent}<small>%</small></strong><em>Terrain measurement</em></div>
-        </div>
-      </div>
-
-      <div className="factor-group-label contextual-label">Contextual evidence layers</div>
+      <div className="factor-group-label">Additional environmental factors</div>
       <div className="factor-grid factor-grid-context">
         <div className="factor-tile factor-tile-context">
           <span className="factor-icon">≋</span>
           <div><span>Antecedent rainfall</span><strong>{environment.rainfall_3d_mm} <small>mm / 3d</small></strong><em>7d total: {environment.rainfall_7d_mm} mm</em></div>
         </div>
-        {contextualFactors.map((factor) => (
+        {environmentalFactors.map((factor) => (
+          <div className="factor-tile factor-tile-context" key={factor.label}>
+            <span className="factor-icon">{factor.icon}</span>
+            <div><span>{factor.label}</span><strong>{factor.value}</strong><em>{factor.note}</em></div>
+          </div>
+        ))}
+      </div>
+
+      <div className="factor-group-label contextual-label">Additional terrain &amp; hydrological factors</div>
+      <div className="factor-grid factor-grid-context">
+        {terrainFactors.map((factor) => (
           <div className="factor-tile factor-tile-context" key={factor.label}>
             <span className="factor-icon">{factor.icon}</span>
             <div><span>{factor.label}</span><strong>{factor.value}</strong><em>{factor.note}</em></div>
@@ -235,9 +228,12 @@ function EnvironmentalFactors({ environment, slope, riskScore, riskLevel }) {
       </div>
 
       <div className="composite-assessment-flow">
-        <div className="composite-flow-label">All signals feed the GeoSentinel assessment</div>
-        <div className="composite-flow-line"><span>Environmental</span><i>+</i><span>Terrain</span><i>+</i><span>Context &amp; evidence</span><b>→</b><strong className={`composite-score ${String(riskLevel || "").toLowerCase()}`}>{riskScore}<small>/100</small></strong></div>
-        <div className="composite-flow-caption">Current live values remain connected to the deployed assessment while contextual layers present the complete system concept.</div>
+        <div className="composite-flow-label">Complete GeoSentinel assessment architecture</div>
+        <div className="composite-flow-line"><span>Core measurements</span><b>+</b><span>Additional factors</span><b>+</b><span>Historical context</span><b>+</b><span>Exposure &amp; evidence</span></div>
+        <div className="composite-flow-arrow">↓</div>
+        <strong className="composite-assessment-label">GeoSentinel Multi-Factor Risk Assessment</strong>
+        <div className="composite-flow-arrow">↓</div>
+        <div className="composite-result-line"><span>Risk Score / Risk Level</span><strong className={`composite-score ${String(riskLevel || "").toLowerCase()}`}>{riskScore}<small>/100</small></strong></div>
       </div>
     </section>
   );
@@ -2538,6 +2534,14 @@ function App() {
                     </div>
                   </div>
 
+                  <div className="environment-card soil-card">
+                    <div className="metric-icon">◉</div>
+                    <div className="metric-copy">
+                      <span>Soil moisture</span>
+                      <strong>{result.environment.soil_moisture ?? "—"}</strong>
+                    </div>
+                  </div>
+
                   <div className="environment-card elevation-card">
                     <div className="metric-icon">▲</div>
                     <div className="metric-copy">
@@ -2851,21 +2855,6 @@ function App() {
                 </div>
 
               )}
-
-              <div className="panel risk-key-panel">
-                <div className="sidebar-panel-heading">
-                  <div className="sidebar-panel-icon">◉</div>
-                  <div>
-                    <h3>Risk Levels</h3>
-                    <p>AI risk shown on the assessment marker.</p>
-                  </div>
-                </div>
-                <div className="risk-key-grid">
-                  <div className="risk-key high-key"><span className="risk-key-dot" />High Risk</div>
-                  <div className="risk-key medium-key"><span className="risk-key-dot" />Medium Risk</div>
-                  <div className="risk-key low-key"><span className="risk-key-dot" />Low Risk</div>
-                </div>
-              </div>
 
             </>
 

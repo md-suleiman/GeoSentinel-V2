@@ -1575,13 +1575,15 @@ button:disabled {
 }
 
 .environment-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
 }
 
 .environment-card {
   align-items: flex-start;
-  padding: 13px;
+  min-height: 92px;
+  padding: 16px 13px;
 }
 
 .environment-card .metric-icon {
@@ -1597,6 +1599,11 @@ button:disabled {
 .environment-card.elevation-card .metric-icon {
   background: #f0fdf4;
   color: #16a34a;
+}
+
+.environment-card.soil-card .metric-icon {
+  background: #f0fdfa;
+  color: #0f766e;
 }
 
 .environment-card.slope-card .metric-icon {
@@ -4069,7 +4076,7 @@ button:disabled {
   gap: 12px;
 }
 
-.factors-heading h2 { margin: 3px 0 5px; font-size: 17px; }
+.factors-heading h2 { margin: 5px 0 8px; font-size: 20px; }
 .section-eyebrow,
 .factor-group-label {
   color: #0f766e;
@@ -4090,11 +4097,10 @@ button:disabled {
   white-space: nowrap;
 }
 
-.factor-group-label { margin: 18px 0 8px; color: #334155; letter-spacing: .06em; }
-.contextual-label { margin-top: 20px; color: #64748b; }
+.factor-group-label { margin: 26px 0 11px; color: #334155; letter-spacing: .06em; font-size: 11px; }
+.contextual-label { margin-top: 28px; color: #64748b; }
 
 .factor-grid { display: grid; gap: 8px; }
-.factor-grid-live { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .factor-grid-context { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 .factor-tile {
@@ -4102,7 +4108,8 @@ button:disabled {
   align-items: flex-start;
   gap: 9px;
   min-width: 0;
-  padding: 10px;
+  min-height: 76px;
+  padding: 14px;
   border-radius: 10px;
   border: 1px solid;
 }
@@ -4112,10 +4119,10 @@ button:disabled {
 .factor-icon { color: #0f766e; font-size: 17px; line-height: 1.2; }
 .factor-tile-context .factor-icon { color: #64748b; }
 .factor-tile div { min-width: 0; }
-.factor-tile span:not(.factor-icon) { display: block; color: #475569; font-size: 10px; font-weight: 700; }
-.factor-tile strong { display: block; margin-top: 3px; color: #0f172a; font-size: 12px; line-height: 1.3; overflow-wrap: anywhere; }
+.factor-tile span:not(.factor-icon) { display: block; color: #475569; font-size: 11px; font-weight: 700; line-height: 1.3; }
+.factor-tile strong { display: block; margin-top: 5px; color: #0f172a; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
 .factor-tile strong small { font-size: 10px; font-weight: 700; }
-.factor-tile em { display: block; margin-top: 3px; color: #64748b; font-size: 9px; font-style: normal; line-height: 1.3; }
+.factor-tile em { display: block; margin-top: 5px; color: #64748b; font-size: 10px; font-style: normal; line-height: 1.35; }
 
 .why-risk-framework { margin-bottom: 11px; padding: 10px; border-radius: 9px; background: #f8fafc; border: 1px solid #e2e8f0; }
 .why-risk-framework-heading { margin-bottom: 7px; color: #334155; font-size: 11px; font-weight: 900; }
@@ -4144,14 +4151,14 @@ button:disabled {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 12px;
   color: #334155;
   font-size: 10px;
   font-weight: 800;
 }
 
 .composite-flow-line span {
-  padding: 5px 7px;
+  padding: 7px 9px;
   border-radius: 999px;
   background: #ffffff;
   border: 1px solid #ccfbf1;
@@ -4162,6 +4169,36 @@ button:disabled {
   color: #0f766e;
   font-style: normal;
   font-size: 14px;
+}
+
+.composite-flow-arrow {
+  margin: 8px 0;
+  color: #0f766e;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+}
+
+.composite-assessment-label {
+  display: block;
+  padding: 11px;
+  border-radius: 9px;
+  background: #0f766e;
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.composite-result-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .composite-score {
@@ -4191,7 +4228,6 @@ button:disabled {
 @media (max-width: 520px) {
   .factors-heading { display: block; }
   .model-contract-badge { display: inline-block; margin-top: 9px; }
-  .factor-grid-live,
   .factor-grid-context { grid-template-columns: 1fr; }
   .why-risk-framework-grid { display: grid; grid-template-columns: 1fr 1fr; }
   .composite-score { margin-left: 0; }
