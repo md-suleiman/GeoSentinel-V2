@@ -2608,7 +2608,6 @@ button:disabled {
   width: 490px !important;
   box-sizing: border-box;
   padding: 18px !important;
-  scrollbar-gutter: stable;
 }
 
 /* Center environmental metrics and prevent elevation values from escaping. */
@@ -4756,5 +4755,24 @@ button:disabled {
   .threat-alert-actions {
     margin-top: 8px !important;
     gap: 7px !important;
+  }
+}
+
+/* Final sidebar geometry: panels fill the centered, padded content area. */
+.sidebar {
+  scrollbar-gutter: auto !important;
+  padding-inline: 18px !important;
+}
+
+.sidebar > .panel {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    padding-inline: 12px !important;
   }
 }
