@@ -195,10 +195,6 @@ function EnvironmentalFactors({ environment, slope }) {
           <div><span>Rainfall intensity</span><strong>{environment.rainfall_intensity_mm_h} <small>mm/h</small></strong><em>Live precipitation</em></div>
         </div>
         <div className="factor-tile factor-tile-live">
-          <span className="factor-icon">≋</span>
-          <div><span>Antecedent rainfall</span><strong>{environment.rainfall_3d_mm} <small>mm / 3d</small></strong><em>7d total: {environment.rainfall_7d_mm} mm</em></div>
-        </div>
-        <div className="factor-tile factor-tile-live">
           <span className="factor-icon">◉</span>
           <div><span>Soil moisture</span><strong>{environment.soil_moisture ?? "—"}</strong><em>0–7 cm hourly mean</em></div>
         </div>
@@ -210,6 +206,10 @@ function EnvironmentalFactors({ environment, slope }) {
 
       <div className="factor-group-label contextual-label">Broader framework context</div>
       <div className="factor-grid factor-grid-context">
+        <div className="factor-tile factor-tile-context">
+          <span className="factor-icon">≋</span>
+          <div><span>Antecedent rainfall</span><strong>{environment.rainfall_3d_mm} <small>mm / 3d</small></strong><em>7d total: {environment.rainfall_7d_mm} mm</em></div>
+        </div>
         {contextualFactors.map((factor) => (
           <div className="factor-tile factor-tile-context" key={factor.label}>
             <span className="factor-icon">{factor.icon}</span>
