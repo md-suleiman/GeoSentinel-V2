@@ -1370,15 +1370,13 @@ function App() {
 
       if (!Array.isArray(parsed)) return [];
 
-      return parsed
-        .filter(
-          (analysis) =>
-            analysis &&
-            Number.isFinite(Number(analysis.latitude)) &&
-            Number.isFinite(Number(analysis.longitude)) &&
-            analysis.result
-        )
-        .slice(0, 20);
+      return parsed.filter(
+        (analysis) =>
+          analysis &&
+          Number.isFinite(Number(analysis.latitude)) &&
+          Number.isFinite(Number(analysis.longitude)) &&
+          analysis.result
+      );
     } catch (error) {
       console.error("Could not restore recent analyses:", error);
       return [];
@@ -1448,7 +1446,7 @@ function App() {
     try {
       localStorage.setItem(
         "geosentinel_recent_analyses_v1",
-        JSON.stringify(recentAnalyses.slice(0, 20))
+        JSON.stringify(recentAnalyses)
       );
     } catch (error) {
       console.error("Could not save recent analyses:", error);
@@ -1943,16 +1941,32 @@ function App() {
 
         if (alreadyExists) return previous;
 
-        return [
-          {
-            id: `${analyzedLat.toFixed(6)}-${analyzedLon.toFixed(6)}-${Date.now()}`,
-            latitude: analyzedLat,
-            longitude: analyzedLon,
-            result: analysisResult,
-            analyzedAt: new Date().toISOString(),
-          },
-          ...previous,
-        ].slice(0, 20);
+        const newAnalysis = {
+          id: `${analyzedLat.toFixed(6)}-${analyzedLon.toFixed(6)}-${Date.now()}`,
+          latitude: analyzedLat,
+          longitude: analyzedLon,
+          result: analysisResult,
+          analyzedAt: new Date().toISOString(),
+        };
+
+        // Keep every High-risk analysis permanently.
+        // Only the newest 20 non-high-risk analyses are retained.
+        const combined = [newAnalysis, ...previous];
+        let normalCount = 0;
+
+        return combined.filter((analysis) => {
+          const score = Number(analysis?.result?.risk_score);
+          const isHighRisk = Number.isFinite(score) && score >= 70;
+
+          if (isHighRisk) return true;
+
+          if (normalCount < 20) {
+            normalCount += 1;
+            return true;
+          }
+
+          return false;
+        });
       });
     };
 
