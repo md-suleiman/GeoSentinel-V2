@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+import gzip
 import math
 import base64
 import uuid
@@ -130,7 +131,7 @@ if (
 # LOAD OSM INFRASTRUCTURE
 # ---------------------------------------------------------
 
-ROADS_PATH = "../data/roads/roads.json"
+ROADS_PATH = "../data/roads/roads.json.gz"
 SETTLEMENTS_PATH = "../data/settlements/settlements.json"
 
 
@@ -147,13 +148,9 @@ settlements = []
 
 try:
 
-    with open(
-        ROADS_PATH,
-        "r",
-        encoding="utf-8",
-    ) as file:
+    with gzip.open(ROADS_PATH, "rb") as file:
 
-        roads = json.load(file)
+        roads = json.loads(file.read().decode("utf-8"))
 
     print(
         f"Roads loaded: {len(roads)}"

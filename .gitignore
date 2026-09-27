@@ -35,4 +35,5 @@ firebase-service-account.json
 # Large raw OSM source
 data/roads/*.osm.pbf
 data/roads/roads.json
+!data/roads/roads.json.gz
 data/water/wb_sac_as.GeoJSON
