@@ -1740,20 +1740,121 @@ function App() {
   /* High-Risk Area State Scan */
   /* -------------------------------- */
 
-  async function scanStateForHighRisk(stateObj) {
-    // Return cached results if this state was already scanned this session.
-    if (stateScanCacheRef.current.has(stateObj.name)) {
-      const cached = stateScanCacheRef.current.get(stateObj.name);
-      setScanStateName(stateObj.name);
-      setScanResults(cached);
-      setScanStatus("done");
-      setScanProgress(cached.length);
-      setScanTotal(cached.length);
-      setScanZoomTarget(stateObj);
-      setShowHighRiskHeatmap(true);
-      return;
+  aasync function scanStateForHighRisk(stateObj) {
+  // Return cached results if this state was already scanned this session.
+  if (stateScanCacheRef.current.has(stateObj.name)) {
+    const cached = stateScanCacheRef.current.get(stateObj.name);
+    setScanStateName(stateObj.name);
+    setScanResults(cached);
+    setScanStatus("done");
+    setScanProgress(cached.length);
+    setScanTotal(cached.length);
+    setScanZoomTarget(stateObj);
+    setShowHighRiskHeatmap(true);
+    return;
+  }
+
+  // Clear previous scan results.
+  setScanResults([]);
+  setScanStateName(stateObj.name);
+  setScanStatus("scanning");
+  setScanProgress(0);
+
+  const grid = generateStateGrid(stateObj.polygon, 150);
+  setScanTotal(grid.length);
+
+  // Keep production requests conservative.
+  const BATCH_SIZE = 3;
+  const highRisk = [];
+  let done = 0;
+
+  async function scanPoint(lat, lon) {
+    const retryDelays = [0, 2000, 4000, 6000];
+
+    for (let attempt = 0; attempt < retryDelays.length; attempt += 1) {
+      if (retryDelays[attempt] > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, retryDelays[attempt])
+        );
+      }
+
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(
+        () => controller.abort(),
+        20000
+      );
+
+      try {
+        const response = await fetch(
+          "https://geosentinel-gqep.onrender.com/predict",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              latitude: lat,
+              longitude: lon,
+            }),
+            cache: "no-store",
+            signal: controller.signal,
+          }
+        );
+
+        window.clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          continue;
+        }
+
+        const data = await response.json();
+        const score = Number(data?.risk_score);
+
+        if (
+          Number.isFinite(score) &&
+          score >= 70 &&
+          data?.risk_level !== "Not Applicable"
+        ) {
+          return {
+            lat,
+            lon,
+            score,
+          };
+        }
+
+        return null;
+      } catch (error) {
+        window.clearTimeout(timeoutId);
+      }
     }
 
+    return null;
+  }
+
+  for (let i = 0; i < grid.length; i += BATCH_SIZE) {
+    const batch = grid.slice(i, i + BATCH_SIZE);
+
+    const results = await Promise.all(
+      batch.map(([lat, lon]) => scanPoint(lat, lon))
+    );
+
+    for (const result of results) {
+      if (result) {
+        highRisk.push(result);
+      }
+    }
+
+    done += batch.length;
+    setScanProgress(done);
+  }
+
+  stateScanCacheRef.current.set(stateObj.name, highRisk);
+
+  setScanResults(highRisk);
+  setScanStatus("done");
+  setScanZoomTarget(stateObj);
+  setShowHighRiskHeatmap(true);
+}
     // Clear previous scan results.
     setScanResults([]);
     setScanStateName(stateObj.name);
