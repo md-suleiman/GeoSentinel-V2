@@ -764,11 +764,11 @@ function AlertOverlay({ alert, onDismiss, onViewMap }) {
 /* -------------------------------- */
 
 function AuthorityPriority({ recentAnalyses, reports, onViewLocation }) {
+  // Keep every analyzed location in the authority queue.
+  // A location does not need to be Medium/High risk to be actionable:
+  // verified field evidence and exposed infrastructure can independently
+  // increase its response priority.
   const analyses = (recentAnalyses || [])
-    .filter((analysis) => {
-      const riskLevel = analysis?.result?.risk_level;
-      return riskLevel === "High" || riskLevel === "Medium";
-    })
     .map((analysis) => {
       const lat = Number(analysis.latitude);
       const lon = Number(analysis.longitude);
@@ -818,11 +818,11 @@ function AuthorityPriority({ recentAnalyses, reports, onViewLocation }) {
           <div className="admin-section-icon">🚨</div>
           <div>
             <h2>Response Priority Queue</h2>
-            <p>Ranked locations that have been analyzed in the current monitoring session.</p>
+            <p>Ranked locations using risk, verified field evidence, and infrastructure context.</p>
           </div>
         </div>
         <div className="admin-empty">
-          No Medium or High risk locations yet. Analyze locations on the monitoring map to build the response queue.
+          No analyzed locations yet. Analyze a location on the monitoring map to build the response queue.
         </div>
       </section>
     );
@@ -852,6 +852,8 @@ function AuthorityPriority({ recentAnalyses, reports, onViewLocation }) {
             ? "Field inspection recommended first"
             : item.priority === "MEDIUM"
             ? "Monitor and verify if conditions change"
+            : item.verifiedNearby.length > 0
+            ? "Review verified field evidence"
             : "Routine monitoring";
 
           return (
