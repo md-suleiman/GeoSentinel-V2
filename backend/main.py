@@ -14,13 +14,10 @@ import time
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
-from numbers import Integral
-
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-from shapely.geometry import LineString, Point, box
-from shapely.strtree import STRtree
+from shapely.geometry import LineString, Point
 from fastapi.staticfiles import StaticFiles
 
 
@@ -194,27 +191,74 @@ print("Infrastructure loading complete.")
 
 
 # ---------------------------------------------------------
-# ROAD SPATIAL INDEX
+# ROAD SPATIAL INDEX  (lightweight grid — no Shapely objects at startup)
 # ---------------------------------------------------------
-# Build road geometries once so each prediction does not scan all roads.
-road_geometries = []
-road_records = []
-road_geometry_lookup = {}
+# Strategy: each road is stored as a minimal tuple and indexed into a
+# dict-keyed grid.  Zero Shapely objects are kept in RAM at rest.
+# Shapely LineStrings are created transiently only for the small
+# candidate set returned by a grid query (~tens of roads, not 238k).
 
+_GRID_DEG = 0.15  # grid cell side length in degrees (~16 km)
+
+
+def _grid_cells_for_coords(coords):
+    """Return the set of grid cell keys that a road's coordinates touch."""
+    cells = set()
+    # Sample every 5th point to keep indexing fast; always include endpoints.
+    for i in range(0, len(coords), 5):
+        lon, lat = coords[i]
+        cells.add((
+            int(math.floor(lat / _GRID_DEG)),
+            int(math.floor(lon / _GRID_DEG)),
+        ))
+    lon, lat = coords[-1]
+    cells.add((
+        int(math.floor(lat / _GRID_DEG)),
+        int(math.floor(lon / _GRID_DEG)),
+    ))
+    return cells
+
+
+# road_index[cell_key] = list of indices into road_compact
+road_index = {}
+# road_compact[i] = (name, type, simplified_coords_tuple)
+road_compact = []
+
+_road_count = 0
 for road in roads:
-    coordinates = road.get("coordinates", [])
-    if len(coordinates) < 2:
+    coords = road.get("coordinates", [])
+    if len(coords) < 2:
         continue
     try:
-        geometry = LineString(coordinates)
-        road_geometries.append(geometry)
-        road_records.append(road)
-        road_geometry_lookup[id(geometry)] = road
+        # Simplify: keep at most every 4th coordinate (plus endpoints).
+        # This preserves enough shape for accurate nearest-point projection
+        # while cutting coordinate storage by ~75 %.
+        if len(coords) > 8:
+            step = max(1, len(coords) // 8)
+            simplified = coords[::step]
+            if simplified[-1] != coords[-1]:
+                simplified = simplified + [coords[-1]]
+        else:
+            simplified = coords
+
+        idx = len(road_compact)
+        road_compact.append((
+            road.get("name"),
+            road.get("type", "road"),
+            tuple(tuple(c) for c in simplified),
+        ))
+
+        for cell in _grid_cells_for_coords(simplified):
+            road_index.setdefault(cell, []).append(idx)
+
+        _road_count += 1
     except Exception:
         continue
 
-road_tree = STRtree(road_geometries) if road_geometries else None
-print(f"Road spatial index ready: {len(road_geometries)} geometries")
+# Free the full roads list — it is no longer needed.
+del roads
+
+print(f"Road spatial index ready: {_road_count} geometries")
 
 
 # ---------------------------------------------------------
@@ -634,49 +678,52 @@ def haversine_distance(
 
 
 # ---------------------------------------------------------
-# FIND NEAREST ROAD
+# FIND NEAREST ROAD  (grid-based, no persistent Shapely objects)
 # ---------------------------------------------------------
 
 def find_nearest_road(
     latitude,
     longitude,
 ):
-    if not road_tree:
+    if not road_compact:
         return None
 
-    point = Point(longitude, latitude)
-    search_box = box(
-        longitude - 0.15,
-        latitude - 0.15,
-        longitude + 0.15,
-        latitude + 0.15,
-    )
-    candidates = road_tree.query(search_box)
+    # Collect candidate road indices from nearby grid cells.
+    center_row = int(math.floor(latitude / _GRID_DEG))
+    center_col = int(math.floor(longitude / _GRID_DEG))
+    seen = set()
+    candidates = []
+    for dr in (-1, 0, 1):
+        for dc in (-1, 0, 1):
+            cell = (center_row + dr, center_col + dc)
+            for idx in road_index.get(cell, []):
+                if idx not in seen:
+                    seen.add(idx)
+                    candidates.append(idx)
 
+    if not candidates:
+        return None
+
+    query_point = Point(longitude, latitude)
     best_road = None
     best_distance = float("inf")
 
-    for candidate in candidates:
-        if isinstance(candidate, Integral):
-            index = int(candidate)
-            road_line = road_geometries[index]
-            road = road_records[index]
-        else:
-            road_line = candidate
-            road = road_geometry_lookup.get(id(road_line))
-            if road is None:
-                continue
-
-        nearest_point = road_line.interpolate(road_line.project(point))
-        distance = haversine_distance(
-            latitude, longitude, nearest_point.y, nearest_point.x
-        )
+    for idx in candidates:
+        name, rtype, coords = road_compact[idx]
+        try:
+            road_line = LineString(coords)
+            nearest_pt = road_line.interpolate(road_line.project(query_point))
+            distance = haversine_distance(
+                latitude, longitude, nearest_pt.y, nearest_pt.x
+            )
+        except Exception:
+            continue
 
         if distance < best_distance:
             best_distance = distance
             best_road = {
-                "name": road.get("name") or "Unnamed road",
-                "type": road.get("type", "road"),
+                "name": name or "Unnamed road",
+                "type": rtype,
                 "distance_m": round(distance, 1),
             }
 
