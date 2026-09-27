@@ -5554,3 +5554,61 @@ button:disabled {
     max-height: 285px !important;
   }
 }
+
+
+/* FINAL HEADER + FIELD REPORT LEGEND FIX */
+@media (max-width: 700px) {
+  .topbar {
+    padding: 22px 12px 10px !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  .brand-block {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    align-items: center !important;
+  }
+
+  .top-actions {
+    margin-left: auto !important;
+    flex: 0 0 auto !important;
+    align-self: center !important;
+  }
+
+  .topbar .top-nav {
+    margin-top: 2px !important;
+  }
+}
+
+/* Keep field-report fill the same size as risk dots, then add
+   a thin white ring and a thin dark outer outline. */
+.map-legend-dot.report-pending-dot,
+.map-legend-dot.report-verified-dot,
+.map-legend-dot.report-rejected-dot {
+  width: 11px !important;
+  height: 11px !important;
+  flex: 0 0 11px !important;
+  box-sizing: content-box !important;
+  border: 1px solid #ffffff !important;
+  box-shadow: 0 0 0 1px #1f2937 !important;
+}
+
+/* Risk markers stay exactly borderless. */
+.map-legend-dot.risk-low-dot,
+.map-legend-dot.risk-medium-dot,
+.map-legend-dot.risk-high-dot,
+.map-legend-dot.high-risk-analysis-dot {
+  width: 11px !important;
+  height: 11px !important;
+  flex: 0 0 11px !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 520px) {
+  .topbar {
+    padding: 22px 10px 10px !important;
+  }
+}
+
