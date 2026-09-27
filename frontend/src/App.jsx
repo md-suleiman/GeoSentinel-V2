@@ -1740,7 +1740,7 @@ function App() {
   /* High-Risk Area State Scan */
   /* -------------------------------- */
 
-  aasync function scanStateForHighRisk(stateObj) {
+  async function scanStateForHighRisk(stateObj) {
   // Return cached results if this state was already scanned this session.
   if (stateScanCacheRef.current.has(stateObj.name)) {
     const cached = stateScanCacheRef.current.get(stateObj.name);
