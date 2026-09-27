@@ -971,7 +971,7 @@ function AdminDashboard({
   const verified = (reports || []).filter((report) => report.status === "Verified").length;
   const rejected = (reports || []).filter((report) => report.status === "Rejected").length;
 
-  const latestAnalyses = (recentAnalyses || []).slice(0, 5);
+  const latestAnalyses = recentAnalyses || [];
 
   return (
     <div className="admin-overlay">

@@ -5421,3 +5421,141 @@ button:disabled {
     padding-inline: 6px !important;
   }
 }
+
+
+/* =========================================================
+   FINAL MOBILE AUTHORITY + LEGEND POLISH
+   ========================================================= */
+
+/* Small breathing room above the app on phones. */
+@media (max-width: 700px) {
+  .app {
+    padding-top: 8px !important;
+    min-height: calc(100vh - 8px) !important;
+  }
+
+  /* Keep authority header compact and keep Logout + Close together. */
+  .admin-header {
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+  }
+
+  .admin-header-brand {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  .admin-title-block {
+    min-width: 0 !important;
+  }
+
+  .admin-header-actions {
+    width: auto !important;
+    flex: 0 0 auto !important;
+    flex-direction: row !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  .admin-header-actions button {
+    width: auto !important;
+    min-width: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  /* The tab switcher must never collapse to a thin strip. */
+  .admin-tabs {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    min-height: 44px !important;
+    box-sizing: border-box !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    align-items: stretch !important;
+  }
+
+  .admin-tab {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex: 1 0 auto !important;
+    min-width: 105px !important;
+    min-height: 34px !important;
+    white-space: nowrap !important;
+  }
+
+  /* Recent risk assessments: actual scrollable list on phones. */
+  .admin-mini-analysis-list {
+    max-height: 320px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    scrollbar-width: thin;
+    padding-right: 3px;
+  }
+}
+
+/* Desktop/tablet scroll area for recent risk assessments. */
+.admin-mini-analysis-list {
+  max-height: 390px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+  padding-right: 4px;
+}
+
+.admin-mini-analysis-list::-webkit-scrollbar {
+  width: 7px;
+}
+
+.admin-mini-analysis-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-mini-analysis-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+/* Field-report legend symbols have the same white outline as
+   the actual field-report CircleMarkers on the map. */
+.map-legend-dot.report-pending-dot,
+.map-legend-dot.report-verified-dot,
+.map-legend-dot.report-rejected-dot {
+  box-sizing: border-box;
+  border: 2px solid #ffffff !important;
+  box-shadow: none !important;
+}
+
+/* Risk-zone symbols remain borderless like the actual risk markers. */
+.map-legend-dot.risk-low-dot,
+.map-legend-dot.risk-medium-dot,
+.map-legend-dot.risk-high-dot,
+.map-legend-dot.high-risk-analysis-dot {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 420px) {
+  .admin-header {
+    gap: 6px !important;
+  }
+
+  .admin-header-actions button {
+    padding: 6px 7px !important;
+    font-size: 10px !important;
+  }
+
+  .admin-title {
+    font-size: 14px !important;
+  }
+
+  .admin-subtitle {
+    font-size: 8px !important;
+  }
+
+  .admin-mini-analysis-list {
+    max-height: 285px !important;
+  }
+}
