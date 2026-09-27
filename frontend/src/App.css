@@ -2275,9 +2275,9 @@ button:disabled {
 }
 
 .map-legend-dot {
-  width: 9px;
-  height: 9px;
-  flex: 0 0 9px;
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
   border-radius: 50%;
 }
 
@@ -4700,9 +4700,9 @@ button:disabled {
   }
 
   .map-legend-dot {
-    width: 7px !important;
-    height: 7px !important;
-    flex-basis: 7px !important;
+    width: 11px !important;
+    height: 11px !important;
+    flex-basis: 11px !important;
   }
 }
 
@@ -5429,11 +5429,6 @@ button:disabled {
 
 /* Small breathing room above the app on phones. */
 @media (max-width: 700px) {
-  .app {
-    padding-top: 8px !important;
-    min-height: calc(100vh - 8px) !important;
-  }
-
   /* Keep authority header compact and keep Logout + Close together. */
   .admin-header {
     flex-wrap: nowrap !important;
@@ -5525,7 +5520,7 @@ button:disabled {
 .map-legend-dot.report-rejected-dot {
   box-sizing: border-box;
   border: 2px solid #ffffff !important;
-  box-shadow: none !important;
+  box-shadow: 0 0 0 1px #334155 !important;
 }
 
 /* Risk-zone symbols remain borderless like the actual risk markers. */
