@@ -2279,8 +2279,15 @@ button:disabled {
   height: 9px;
   flex: 0 0 9px;
   border-radius: 50%;
-  border: 1px solid #ffffff;
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.14);
+}
+
+/* Risk-zone legend symbols match the borderless map CircleMarkers. */
+.risk-low-dot,
+.risk-medium-dot,
+.risk-high-dot,
+.high-risk-analysis-dot {
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .historical-dot { background: #7c3aed; }
@@ -5077,4 +5084,340 @@ button:disabled {
   0%   { transform: scale(1);   opacity: 0.9; }
   60%  { transform: scale(1.7); opacity: 0.3; }
   100% { transform: scale(2.2); opacity: 0; }
+}
+
+
+/* =========================================================
+   FINAL MOBILE / ADMIN / LEGEND POLISH
+   ========================================================= */
+
+@media (max-width: 700px) {
+  .sidebar {
+    padding: 10px !important;
+  }
+
+  .panel {
+    padding: 13px !important;
+    margin-bottom: 10px !important;
+    border-radius: 10px !important;
+  }
+
+  .panel h2 {
+    font-size: 16px;
+  }
+
+  .muted {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .coordinate-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    margin-top: 12px !important;
+  }
+
+  .coordinate-card {
+    padding: 9px !important;
+    gap: 7px !important;
+  }
+
+  .coordinate-card .metric-icon {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+    font-size: 15px;
+  }
+
+  .coordinate-card strong,
+  .coordinate-value-button {
+    font-size: 13px !important;
+  }
+
+  .environment-grid,
+  .detail-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 7px !important;
+    margin-top: 12px !important;
+  }
+
+  .environment-card {
+    min-height: 82px !important;
+    padding: 9px 7px !important;
+    gap: 5px !important;
+  }
+
+  .environment-card span,
+  .detail-card span {
+    font-size: 9px !important;
+  }
+
+  .environment-card strong,
+  .detail-card strong {
+    font-size: 13px !important;
+  }
+
+  .location-action-row {
+    gap: 7px !important;
+    margin-top: 12px !important;
+  }
+
+  .location-action-row button,
+  .analyze-button {
+    min-height: 42px !important;
+    font-size: 12px !important;
+  }
+
+  .result-panel .probability {
+    margin: 12px 0 4px !important;
+    padding: 11px 8px !important;
+    font-size: 32px !important;
+  }
+
+  .infrastructure-card {
+    padding: 11px !important;
+  }
+
+  .infrastructure-row {
+    gap: 8px !important;
+  }
+
+  .infrastructure-label,
+  .infrastructure-value {
+    font-size: 11px !important;
+  }
+
+  .map-legend {
+    left: 7px !important;
+    bottom: 7px !important;
+    min-width: 0 !important;
+    width: max-content !important;
+    max-width: calc(100% - 14px) !important;
+    padding: 7px 8px !important;
+    border-radius: 8px !important;
+  }
+
+  .map-legend-title {
+    margin-bottom: 4px !important;
+    font-size: 9px !important;
+  }
+
+  .map-legend-subtitle {
+    margin: 4px 0 2px !important;
+    font-size: 8px !important;
+  }
+
+  .map-legend-divider {
+    margin: 3px 0 !important;
+  }
+
+  .map-legend-item {
+    min-height: 18px !important;
+    gap: 5px !important;
+    font-size: 9px !important;
+  }
+
+  .map-legend-dot {
+    width: 7px !important;
+    height: 7px !important;
+    flex-basis: 7px !important;
+  }
+
+  .admin-overlay {
+    padding: 6px !important;
+  }
+
+  .admin-shell {
+    min-height: calc(100vh - 12px) !important;
+    border-radius: 10px !important;
+  }
+
+  .admin-header {
+    min-height: auto !important;
+    padding: 10px !important;
+    gap: 8px !important;
+    align-items: flex-start !important;
+  }
+
+  .admin-header-brand {
+    min-width: 0 !important;
+    gap: 8px !important;
+    align-items: center !important;
+  }
+
+  .admin-brand-mark {
+    display: none !important;
+  }
+
+  .admin-title-block {
+    min-width: 0 !important;
+    position: static !important;
+    transform: none !important;
+    white-space: normal !important;
+  }
+
+  .admin-title {
+    font-size: 15px !important;
+    line-height: 1.2 !important;
+  }
+
+  .admin-subtitle {
+    display: block !important;
+    margin-top: 2px !important;
+    font-size: 9px !important;
+    line-height: 1.25 !important;
+  }
+
+  .admin-header-actions {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 5px !important;
+    flex: 0 0 auto !important;
+  }
+
+  .admin-header-actions button {
+    width: auto !important;
+    min-width: 68px !important;
+    min-height: 32px !important;
+    margin: 0 !important;
+    padding: 6px 8px !important;
+    font-size: 10px !important;
+  }
+
+  .admin-body {
+    padding: 9px !important;
+  }
+
+  .admin-tabs {
+    gap: 6px !important;
+    overflow-x: auto !important;
+    padding-bottom: 2px !important;
+  }
+
+  .admin-tab {
+    flex: 0 0 auto !important;
+    min-width: max-content !important;
+    min-height: 38px !important;
+    margin: 0 !important;
+    padding: 8px 10px !important;
+    font-size: 10px !important;
+  }
+
+  .admin-overview-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .admin-stats {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 7px !important;
+  }
+
+  .admin-stat {
+    min-height: 82px !important;
+    padding: 10px !important;
+  }
+
+  .admin-stat strong {
+    font-size: 21px !important;
+  }
+
+  .admin-report-list {
+    padding-right: 0 !important;
+    max-height: none !important;
+  }
+
+  .admin-report {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    min-height: 0 !important;
+    padding: 12px 0 !important;
+  }
+
+  .admin-report-title-block,
+  .admin-report-info,
+  .admin-report-actions-column,
+  .admin-report-media-column {
+    width: 100% !important;
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+
+  .admin-report-title-block {
+    display: block !important;
+  }
+
+  .admin-report-info {
+    text-align: left !important;
+  }
+
+  .admin-report-media-column {
+    align-items: stretch !important;
+    gap: 7px !important;
+  }
+
+  .admin-report-media-column .admin-report-status {
+    text-align: left !important;
+  }
+
+  .admin-report-actions-inline {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .admin-report-actions-inline button,
+  .admin-view-image,
+  .admin-view-map {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .priority-item {
+    grid-template-columns: 38px minmax(0, 1fr) !important;
+    gap: 8px !important;
+    padding: 11px !important;
+  }
+
+  .priority-rank {
+    width: 34px !important;
+    height: 34px !important;
+  }
+
+  .priority-topline {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    gap: 3px !important;
+  }
+
+  .priority-facts {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .coordinate-grid,
+  .environment-grid,
+  .detail-grid,
+  .admin-stats {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .panel {
+    padding: 11px !important;
+  }
+
+  .topbar {
+    padding: 0 9px !important;
+  }
+
+  .brand-title {
+    font-size: 18px !important;
+  }
+
+  .admin-header-actions button {
+    min-width: 62px !important;
+    padding-inline: 6px !important;
+  }
 }

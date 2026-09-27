@@ -24,6 +24,11 @@ from fastapi.staticfiles import StaticFiles
 app = FastAPI(title="GeoSentinel API")
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 # ---------------------------------------------------------
 # FIELD REPORT PHOTO STORAGE
 # ---------------------------------------------------------

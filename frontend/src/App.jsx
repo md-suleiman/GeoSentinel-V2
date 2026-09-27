@@ -1327,6 +1327,7 @@ function App() {
   const [result, setResult] = useState(null);
   const [hasSelectedLocation, setHasSelectedLocation] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [backendWaking, setBackendWaking] = useState(false);
   const analysisCacheRef = useRef(new Map(
     (() => {
       try {
@@ -1812,6 +1813,58 @@ function App() {
   /* Analyze location */
   /* -------------------------------- */
 
+  async function fetchPredictionWithRetry(latitudeValue, longitudeValue) {
+    const retryDelays = [0, 2000, 4000, 6000, 8000, 10000];
+    let lastError = null;
+
+    for (let attempt = 0; attempt < retryDelays.length; attempt += 1) {
+      if (retryDelays[attempt] > 0) {
+        setBackendWaking(true);
+        await new Promise((resolve) =>
+          setTimeout(resolve, retryDelays[attempt])
+        );
+      }
+
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+
+      try {
+        const response = await fetch(
+          "https://geosentinel-gqep.onrender.com/predict",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              latitude: latitudeValue,
+              longitude: longitudeValue,
+            }),
+            cache: "no-store",
+            signal: controller.signal,
+          }
+        );
+
+        window.clearTimeout(timeoutId);
+
+        if (response.ok) {
+          setBackendWaking(false);
+          return response;
+        }
+
+        lastError = new Error(
+          `Prediction request failed with status ${response.status}`
+        );
+      } catch (error) {
+        window.clearTimeout(timeoutId);
+        lastError = error;
+      }
+    }
+
+    setBackendWaking(false);
+    throw lastError || new Error("Prediction request failed");
+  }
+
   async function analyzeLocation(lat, lon, options = {}) {
     const analyzedLat = Number(lat);
     const analyzedLon = Number(lon);
@@ -1875,23 +1928,10 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        "https://geosentinel-gqep.onrender.com/predict",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            latitude: analyzedLat,
-            longitude: analyzedLon,
-          }),
-        }
+      const response = await fetchPredictionWithRetry(
+        analyzedLat,
+        analyzedLon
       );
-
-      if (!response.ok) {
-        throw new Error("Prediction request failed");
-      }
 
       const data = await response.json();
       analysisCacheRef.current.set(cacheKey, data);
@@ -1921,7 +1961,7 @@ function App() {
       return data;
     } catch (error) {
       console.error(error);
-      alert("Could not connect to GeoSentinel API.");
+      alert("GeoSentinel API is unavailable after several attempts. Please try again.");
       return null;
     } finally {
       setLoading(false);
@@ -2207,6 +2247,13 @@ function App() {
 
   useEffect(() => {
     loadReports();
+  }, []);
+
+  // Wake the Render backend in the background without blocking the UI.
+  useEffect(() => {
+    fetch("https://geosentinel-gqep.onrender.com/health", {
+      cache: "no-store",
+    }).catch(() => {});
   }, []);
 
   async function submitReport() {
@@ -3032,30 +3079,60 @@ function App() {
 
           <div className="map-legend" aria-label="Map legend">
             <div className="map-legend-title">Map Legend</div>
-            <div className="map-legend-subtitle">Risk zones</div>
-            <div className="map-legend-item">
-              <span className="map-legend-dot risk-low-dot" />
-              <span>Low risk</span>
-            </div>
-            <div className="map-legend-item">
-              <span className="map-legend-dot risk-medium-dot" />
-              <span>Medium risk</span>
-            </div>
-            <div className="map-legend-item">
-              <span className="map-legend-dot risk-high-dot" />
-              <span>High risk</span>
-            </div>
-            {showHighRiskHeatmap && (
-              <div className="map-legend-item">
-                <span className="map-legend-dot high-risk-analysis-dot" />
-                <span>High-Risk Scan</span>
-              </div>
+
+            {result && result.risk_level !== "Not Applicable" && (
+              <>
+                <div className="map-legend-subtitle">Risk zones</div>
+                <div className="map-legend-item">
+                  <span className="map-legend-dot risk-low-dot" />
+                  <span>Low risk</span>
+                </div>
+                <div className="map-legend-item">
+                  <span className="map-legend-dot risk-medium-dot" />
+                  <span>Medium risk</span>
+                </div>
+                <div className="map-legend-item">
+                  <span className="map-legend-dot risk-high-dot" />
+                  <span>High risk</span>
+                </div>
+              </>
             )}
+
+            {showRecentHighRisk &&
+              (recentAnalyses || []).some(
+                (analysis) =>
+                  Number(analysis?.result?.risk_score) >= 70
+              ) && (
+                <>
+                  <div className="map-legend-divider" />
+                  <div className="map-legend-item">
+                    <span className="map-legend-dot high-risk-analysis-dot" />
+                    <span>Recent High Risk</span>
+                  </div>
+                </>
+              )}
+
+            {showHighRiskHeatmap && scanResults.length > 0 && (
+              <>
+                <div className="map-legend-divider" />
+                <div className="map-legend-item">
+                  <span className="map-legend-dot high-risk-analysis-dot" />
+                  <span>High-Risk Scan</span>
+                </div>
+              </>
+            )}
+
+            {showHistoricalLandslides && (
+              <>
+                <div className="map-legend-divider" />
+                <div className="map-legend-item">
+                  <span className="map-legend-dot historical-dot" />
+                  <span>Historical Landslide</span>
+                </div>
+              </>
+            )}
+
             <div className="map-legend-divider" />
-            <div className="map-legend-item">
-              <span className="map-legend-dot historical-dot" />
-              <span>Historical Landslide</span>
-            </div>
             <div className="map-legend-item">
               <span className="map-legend-dot report-pending-dot" />
               <span>Field Report (Pending)</span>
@@ -3203,7 +3280,9 @@ function App() {
                 disabled={loading || liveAnalysisEnabled}
               >
                 {loading
-                  ? "Analyzing..."
+                  ? (backendWaking
+                      ? "Waking GeoSentinel AI..."
+                      : "Analyzing...")
                   : "Analyze Selected Location"}
               </button>
             </div>
