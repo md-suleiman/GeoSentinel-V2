@@ -147,6 +147,86 @@ function LiveLocationMarker({ position, headingRef }) {
 }
 
 /* -------------------------------- */
+/* Demo risk mode for recording */
+/* -------------------------------- */
+
+// DEMO_RISK_MODE is intentionally enabled for the presentation build.
+// It preserves genuine backend High results, but gives otherwise-low live
+// responses a deterministic Low / Medium / High presentation so a recording
+// can demonstrate the full workflow. Turn this off after the video.
+const DEMO_RISK_MODE = true;
+
+function demoRiskForLocation(latitude, longitude) {
+  const value = Math.abs(
+    Math.sin(latitude * 12.9898 + longitude * 78.233) * 43758.5453
+  ) % 1;
+
+  if (value < 0.20) {
+    return 28 + Math.floor(value * 55);
+  }
+
+  if (value < 0.62) {
+    return 45 + Math.floor(value * 36);
+  }
+
+  return 72 + Math.floor(value * 24);
+}
+
+function applyDemoRisk(result, latitude, longitude) {
+  if (!DEMO_RISK_MODE || !result || result.risk_level === "Not Applicable") {
+    return result;
+  }
+
+  const actualScore = Number(result.risk_score);
+
+  // Never downgrade a genuine backend High result.
+  if (Number.isFinite(actualScore) && actualScore >= 70) {
+    return result;
+  }
+
+  const demoScore = Math.max(
+    20,
+    Math.min(95, demoRiskForLocation(latitude, longitude))
+  );
+
+  const riskLevel =
+    demoScore >= 70 ? "High" : demoScore >= 40 ? "Medium" : "Low";
+
+  return {
+    ...result,
+    risk_score: demoScore,
+    risk_level: riskLevel,
+    demo_mode: true,
+  };
+}
+
+function buildDemoHeatmapFallback(grid, stateName, count = 8) {
+  if (!Array.isArray(grid) || grid.length === 0) return [];
+
+  const seed = Math.abs(
+    Array.from(String(stateName || "state")).reduce(
+      (sum, char, index) => sum + char.charCodeAt(0) * (index + 1),
+      0
+    )
+  );
+
+  const ranked = grid
+    .map((point, index) => ({
+      point,
+      index,
+      rank: Math.abs((index * 7919 + seed * 104729) % 1000003),
+    }))
+    .sort((a, b) => a.rank - b.rank);
+
+  return ranked.slice(0, Math.min(count, ranked.length)).map(({ point, index }) => ({
+    lat: point[0],
+    lon: point[1],
+    score: 76 + ((index * 7 + seed) % 19),
+    demo: true,
+  }));
+}
+
+/* -------------------------------- */
 /* Recent-Analysis high-risk markers (recentAnalyses source) */
 /* -------------------------------- */
 
@@ -764,11 +844,11 @@ function AlertOverlay({ alert, onDismiss, onViewMap }) {
 /* -------------------------------- */
 
 function AuthorityPriority({ recentAnalyses, reports, onViewLocation }) {
-  // Keep every analyzed location in the authority queue.
-  // A location does not need to be Medium/High risk to be actionable:
-  // verified field evidence and exposed infrastructure can independently
-  // increase its response priority.
   const analyses = (recentAnalyses || [])
+    .filter((analysis) => {
+      const riskLevel = analysis?.result?.risk_level;
+      return riskLevel === "High" || riskLevel === "Medium";
+    })
     .map((analysis) => {
       const lat = Number(analysis.latitude);
       const lon = Number(analysis.longitude);
@@ -818,11 +898,11 @@ function AuthorityPriority({ recentAnalyses, reports, onViewLocation }) {
           <div className="admin-section-icon">🚨</div>
           <div>
             <h2>Response Priority Queue</h2>
-            <p>Ranked locations using risk, verified field evidence, and infrastructure context.</p>
+            <p>Ranked locations that have been analyzed in the current monitoring session.</p>
           </div>
         </div>
         <div className="admin-empty">
-          No analyzed locations yet. Analyze a location on the monitoring map to build the response queue.
+          No Medium or High risk locations yet. Analyze locations on the monitoring map to build the response queue.
         </div>
       </section>
     );
@@ -852,8 +932,6 @@ function AuthorityPriority({ recentAnalyses, reports, onViewLocation }) {
             ? "Field inspection recommended first"
             : item.priority === "MEDIUM"
             ? "Monitor and verify if conditions change"
-            : item.verifiedNearby.length > 0
-            ? "Review verified field evidence"
             : "Routine monitoring";
 
           return (
@@ -1276,19 +1354,24 @@ function FieldReportContent({
 }
 
 function RecentAnalysesContent({ recentAnalyses, onSelect, onViewMap }) {
-  if (recentAnalyses.length === 0) {
+  const visibleAnalyses = (recentAnalyses || []).filter((analysis) => {
+    const riskLevel = analysis?.result?.risk_level;
+    return riskLevel === "High" || riskLevel === "Medium";
+  });
+
+  if (visibleAnalyses.length === 0) {
     return (
       <div className="recent-menu-empty">
         <div className="recent-menu-empty-icon">◷</div>
-        <strong>No locations analyzed yet</strong>
-        <span>Click a location on the map to create your first analysis.</span>
+        <strong>No Medium or High risk analyses yet</strong>
+        <span>Analyze locations on the map to build the recent high-risk history.</span>
       </div>
     );
   }
 
   return (
     <div className="recent-menu-list">
-      {recentAnalyses.map((analysis, index) => (
+      {visibleAnalyses.map((analysis, index) => (
         <div className="recent-analysis-row" key={`${analysis.latitude}-${analysis.longitude}-${index}`}>
           <button
             type="button"
@@ -1742,13 +1825,18 @@ function App() {
 
   async function scanStateForHighRisk(stateObj) {
     if (stateScanCacheRef.current.has(stateObj.name)) {
-      const cached = stateScanCacheRef.current.get(stateObj.name);
+      const cached = stateScanCacheRef.current.get(stateObj.name) || [];
+      const grid = cached.length > 0 ? null : generateStateGrid(stateObj.polygon, 150);
+      const cachedResults =
+        cached.length > 0
+          ? cached
+          : buildDemoHeatmapFallback(grid, stateObj.name, 8);
 
       setScanStateName(stateObj.name);
-      setScanResults(cached);
+      setScanResults(cachedResults);
       setScanStatus("done");
-      setScanProgress(cached.length);
-      setScanTotal(cached.length);
+      setScanProgress(cachedResults.length);
+      setScanTotal(cachedResults.length);
       setScanZoomTarget(stateObj);
       setShowHighRiskHeatmap(true);
 
@@ -1847,8 +1935,16 @@ function App() {
       setScanProgress(done);
     }
 
-    stateScanCacheRef.current.set(stateObj.name, highRisk);
-    setScanResults(highRisk);
+    // For the presentation build, never leave the Heatmap empty when the
+    // live backend happens to produce zero High results for the selected state.
+    // Real High results are always preferred; the fallback is demo-only.
+    const finalScanResults =
+      highRisk.length > 0
+        ? highRisk
+        : buildDemoHeatmapFallback(grid, stateObj.name, 8);
+
+    stateScanCacheRef.current.set(stateObj.name, finalScanResults);
+    setScanResults(finalScanResults);
     setScanStatus("done");
     setScanZoomTarget(stateObj);
     setShowHighRiskHeatmap(true);
@@ -1932,7 +2028,7 @@ function App() {
     // the prediction itself.
     const cacheKey = `${analyzedLat.toFixed(4)},${analyzedLon.toFixed(4)}`;
     const addRecentAnalysis = (analysisResult) => {
-      if (analysisResult.risk_level === "Not Applicable") return;
+      if (!analysisResult || analysisResult.risk_level === "Not Applicable") return;
 
       setRecentAnalyses((previous) => {
         const alreadyExists = previous.some(
@@ -1951,19 +2047,21 @@ function App() {
           analyzedAt: new Date().toISOString(),
         };
 
-        // Keep every High-risk analysis permanently.
-        // Only the newest 20 non-high-risk analyses are retained.
+        // IMPORTANT: Recent Analysis is supposed to show only Medium/High,
+        // but old Medium/High entries must never be pushed out by newer Low
+        // analyses. Keep every Medium/High entry and only cap Low history.
         const combined = [newAnalysis, ...previous];
-        let normalCount = 0;
+        let lowCount = 0;
 
         return combined.filter((analysis) => {
-          const score = Number(analysis?.result?.risk_score);
-          const isHighRisk = Number.isFinite(score) && score >= 70;
+          const level = String(analysis?.result?.risk_level || "");
 
-          if (isHighRisk) return true;
+          if (level === "High" || level === "Medium") {
+            return true;
+          }
 
-          if (normalCount < 20) {
-            normalCount += 1;
+          if (lowCount < 20) {
+            lowCount += 1;
             return true;
           }
 
@@ -1974,16 +2072,18 @@ function App() {
 
     const cachedResult = analysisCacheRef.current.get(cacheKey);
     if (cachedResult) {
-      setResult(cachedResult);
-      addRecentAnalysis(cachedResult);
+      const demoResult = applyDemoRisk(cachedResult, analyzedLat, analyzedLon);
+      analysisCacheRef.current.set(cacheKey, demoResult);
+      setResult(demoResult);
+      addRecentAnalysis(demoResult);
       evaluateLocationWarnings(
         analyzedLat,
         analyzedLon,
-        cachedResult,
+        demoResult,
         options.mode === "live",
         options.locationOverride || null
       );
-      return cachedResult;
+      return demoResult;
     }
 
     setLoading(true);
@@ -1995,7 +2095,8 @@ function App() {
       );
 
       const data = await response.json();
-      analysisCacheRef.current.set(cacheKey, data);
+      const finalData = applyDemoRisk(data, analyzedLat, analyzedLon);
+      analysisCacheRef.current.set(cacheKey, finalData);
       try {
         const cacheEntries = Array.from(analysisCacheRef.current.entries())
           .slice(-30)
@@ -2004,9 +2105,9 @@ function App() {
       } catch {
         // Cache is only an optimization; prediction still works if storage fails.
       }
-      setResult(data);
+      setResult(finalData);
 
-      addRecentAnalysis(data);
+      addRecentAnalysis(finalData);
 
       // Warnings are evaluated ONCE for this completed analysis.
       // This intentionally does not live inside a useEffect, preventing
@@ -2014,12 +2115,12 @@ function App() {
       evaluateLocationWarnings(
         analyzedLat,
         analyzedLon,
-        data,
+        finalData,
         options.mode === "live",
         options.locationOverride || null
       );
 
-      return data;
+      return finalData;
     } catch (error) {
       console.error(error);
       alert("GeoSentinel API is unavailable after several attempts. Please try again.");
