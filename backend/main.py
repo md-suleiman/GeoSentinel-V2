@@ -2,11 +2,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-import gzip
 import math
 import base64
 import uuid
 import json
+import sqlite3
 import os
 import requests
 import joblib
@@ -125,40 +125,38 @@ if (
 
 
 # ---------------------------------------------------------
-# LOAD OSM INFRASTRUCTURE
+# ROADS — disk-backed SQLite database (opened read-only)
 # ---------------------------------------------------------
+# roads.db is pre-built by data/roads/build_roads_db.py and committed
+# to Git.  The backend never loads roads.json.gz; it only opens the
+# compact database file, keeping road data off the Python heap entirely.
 
-ROADS_PATH = "../data/roads/roads.json.gz"
+ROADS_DB_PATH = os.path.abspath(
+    os.path.join(BASE_DIR, "..", "data", "roads", "roads.db")
+)
+
+_roads_db: sqlite3.Connection | None = None
+
+try:
+    _roads_db = sqlite3.connect(
+        f"file:{ROADS_DB_PATH}?mode=ro",
+        uri=True,
+        check_same_thread=False,
+    )
+    # Tune for fast read-only queries.
+    _roads_db.execute("PRAGMA cache_size = -8192")  # 8 MB page cache
+    _roads_db.execute("PRAGMA temp_store = MEMORY")
+    row = _roads_db.execute("SELECT COUNT(*) FROM roads").fetchone()
+    print(f"Road database opened: {row[0]:,} roads")
+except Exception as _road_db_error:
+    print("Road database not available:", _road_db_error)
+
+
 SETTLEMENTS_PATH = "../data/settlements/settlements.json"
-
 
 print("Loading infrastructure data...")
 
-
-roads = []
 settlements = []
-
-
-# ---------------------------------------------------------
-# LOAD ROADS
-# ---------------------------------------------------------
-
-try:
-
-    with gzip.open(ROADS_PATH, "rb") as file:
-
-        roads = json.loads(file.read().decode("utf-8"))
-
-    print(
-        f"Roads loaded: {len(roads)}"
-    )
-
-except Exception as error:
-
-    print(
-        "Road loading error:",
-        error,
-    )
 
 
 # ---------------------------------------------------------
@@ -188,77 +186,6 @@ except Exception as error:
 
 
 print("Infrastructure loading complete.")
-
-
-# ---------------------------------------------------------
-# ROAD SPATIAL INDEX  (lightweight grid — no Shapely objects at startup)
-# ---------------------------------------------------------
-# Strategy: each road is stored as a minimal tuple and indexed into a
-# dict-keyed grid.  Zero Shapely objects are kept in RAM at rest.
-# Shapely LineStrings are created transiently only for the small
-# candidate set returned by a grid query (~tens of roads, not 238k).
-
-_GRID_DEG = 0.15  # grid cell side length in degrees (~16 km)
-
-
-def _grid_cells_for_coords(coords):
-    """Return the set of grid cell keys that a road's coordinates touch."""
-    cells = set()
-    # Sample every 5th point to keep indexing fast; always include endpoints.
-    for i in range(0, len(coords), 5):
-        lon, lat = coords[i]
-        cells.add((
-            int(math.floor(lat / _GRID_DEG)),
-            int(math.floor(lon / _GRID_DEG)),
-        ))
-    lon, lat = coords[-1]
-    cells.add((
-        int(math.floor(lat / _GRID_DEG)),
-        int(math.floor(lon / _GRID_DEG)),
-    ))
-    return cells
-
-
-# road_index[cell_key] = list of indices into road_compact
-road_index = {}
-# road_compact[i] = (name, type, simplified_coords_tuple)
-road_compact = []
-
-_road_count = 0
-for road in roads:
-    coords = road.get("coordinates", [])
-    if len(coords) < 2:
-        continue
-    try:
-        # Simplify: keep at most every 4th coordinate (plus endpoints).
-        # This preserves enough shape for accurate nearest-point projection
-        # while cutting coordinate storage by ~75 %.
-        if len(coords) > 8:
-            step = max(1, len(coords) // 8)
-            simplified = coords[::step]
-            if simplified[-1] != coords[-1]:
-                simplified = simplified + [coords[-1]]
-        else:
-            simplified = coords
-
-        idx = len(road_compact)
-        road_compact.append((
-            road.get("name"),
-            road.get("type", "road"),
-            tuple(tuple(c) for c in simplified),
-        ))
-
-        for cell in _grid_cells_for_coords(simplified):
-            road_index.setdefault(cell, []).append(idx)
-
-        _road_count += 1
-    except Exception:
-        continue
-
-# Free the full roads list — it is no longer needed.
-del roads
-
-print(f"Road spatial index ready: {_road_count} geometries")
 
 
 # ---------------------------------------------------------
@@ -678,28 +605,40 @@ def haversine_distance(
 
 
 # ---------------------------------------------------------
-# FIND NEAREST ROAD  (grid-based, no persistent Shapely objects)
+# FIND NEAREST ROAD  (SQLite + RTree, no road data in Python heap)
 # ---------------------------------------------------------
 
 def find_nearest_road(
     latitude,
     longitude,
 ):
-    if not road_compact:
+    if _roads_db is None:
         return None
 
-    # Collect candidate road indices from nearby grid cells.
-    center_row = int(math.floor(latitude / _GRID_DEG))
-    center_col = int(math.floor(longitude / _GRID_DEG))
-    seen = set()
-    candidates = []
-    for dr in (-1, 0, 1):
-        for dc in (-1, 0, 1):
-            cell = (center_row + dr, center_col + dc)
-            for idx in road_index.get(cell, []):
-                if idx not in seen:
-                    seen.add(idx)
-                    candidates.append(idx)
+    # Spatial query: retrieve roads whose bounding boxes overlap a
+    # 0.15-degree buffer around the query point (~16 km radius).
+    buffer = 0.15
+    query = """
+        SELECT r.name, r.type, r.coords
+        FROM   roads_rtree AS rt
+        JOIN   roads       AS r  ON r.id = rt.id
+        WHERE  rt.min_lon <= ?
+          AND  rt.max_lon >= ?
+          AND  rt.min_lat <= ?
+          AND  rt.max_lat >= ?
+    """
+    try:
+        cur = _roads_db.cursor()
+        cur.execute(query, (
+            longitude + buffer,
+            longitude - buffer,
+            latitude  + buffer,
+            latitude  - buffer,
+        ))
+        candidates = cur.fetchall()
+    except Exception as error:
+        print("Road DB query error:", error)
+        return None
 
     if not candidates:
         return None
@@ -708,9 +647,9 @@ def find_nearest_road(
     best_road = None
     best_distance = float("inf")
 
-    for idx in candidates:
-        name, rtype, coords = road_compact[idx]
+    for name, rtype, coords_json in candidates:
         try:
+            coords = json.loads(coords_json)
             road_line = LineString(coords)
             nearest_pt = road_line.interpolate(road_line.project(query_point))
             distance = haversine_distance(
